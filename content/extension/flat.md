@@ -40,6 +40,9 @@ flat:
 
   # Auto-lock when flat files are modified (default: true)
   auto_lock_on_flat_changes: true
+
+  # Custom property names to exclude from flat file export and import (default: [])
+  ignored_properties: ['someTransientProp']
 ```
 
 ## Usage
@@ -185,6 +188,33 @@ php bin/console pw:flat:conflicts:clear [host] [--dry]
 - Markdown: `page~conflict-abc123.md` (contains the losing version with a comment header)
 - CSV: `index.conflicts.csv` (appends conflict details for media/conversation)
 
+### YAML Front Matter Validation
+
+Invalid YAML in a `.md` file (e.g. an unescaped quote: `title: 'La Baltique : d'Usedom'`) is a common authoring mistake.
+
+**Proactive check before syncing:**
+
+```bash
+php bin/console pw:flat:lint [host]
+```
+
+Returns exit code `0` if all files are valid, `1` if any errors are found. Each error shows the file path and line number.
+
+**During `pw:flat:sync`:**
+
+- Files with invalid YAML are **skipped** (not crash the entire sync)
+- The error is printed to the console with file path and line number
+- The corresponding DB page is **not deleted** (the page is preserved until the YAML is fixed)
+- After sync completes, a warning lists the number of skipped files and suggests running `pw:flat:lint`
+
+**Common YAML pitfalls:**
+
+| Mistake | Fix |
+| --- | --- |
+| `title: 'It's broken'` | Use double quotes: `title: "It's fine"` |
+| `title: 'A: B'` unquoted colon | Already quoted — but inner single quote breaks it: `title: "A: B"` |
+| Smart quotes `'` from copy-paste | Replace with straight quotes `'` or `"` |
+
 ## Sync Behavior Reference
 
 ### Execution Pipeline
@@ -222,7 +252,7 @@ Non-`.md` files (`.txt`, `.csv`, etc.) do NOT influence page auto-detection. Onl
 2. **Markdown import**: all `.md` files are parsed (YAML frontmatter + body)
 3. **Deferred properties**: `parentPage`, `translations`, `extendedPage` are resolved after all pages exist
 4. **Deletion**: pages in DB with no matching `.md` file AND no matching `redirection.csv` row are **deleted**
-5. **Index regeneration**: `index.csv` / `iDraft.csv` are regenerated to reflect DB state
+5. **Index regeneration**: `index.csv` / `index.draft.csv` are regenerated to reflect DB state
 
 **Important behaviors:**
 
@@ -235,7 +265,7 @@ Non-`.md` files (`.txt`, `.csv`, etc.) do NOT influence page auto-detection. Onl
 
 1. Each page is exported as a `.md` file with YAML frontmatter
 2. Pages with redirections go to `redirection.csv` (their `.md` files are deleted)
-3. Published pages are listed in `index.csv`, drafts in `iDraft.csv`
+3. Published pages are listed in `index.csv`, drafts in `index.draft.csv`
 4. **Smart skip**: if exported content matches existing file content, the file is not rewritten
 5. File `mtime` is synced to `page.updatedAt` to prevent false freshness detection on next auto run
 
@@ -440,7 +470,7 @@ Here is what happens for typical editing workflows after running `pw:flat:sync -
 
 #### Pages
 
-- **Create a new `.md` file** — a new page is created in the database. It appears in `index.csv` (or `iDraft.csv` if `publishedAt: draft`).
+- **Create a new `.md` file** — a new page is created in the database. It appears in `index.csv` (or `index.draft.csv` if `publishedAt: draft`).
 - **Edit a `.md` file** — the page is updated in the database (the file's `mtime` must be newer than the page's `updatedAt`).
 - **Delete a `.md` file** — the page is **deleted from the database**. Its row is removed from `index.csv`.
 - **Rename a `.md` file** — the old page is deleted and a new one is created with the slug derived from the new filename. To keep the same page, use the `slug` property in frontmatter instead.

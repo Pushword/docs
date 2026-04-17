@@ -28,7 +28,7 @@ pushword:
       static_generators: [Pushword\StaticGenerator\Generator\PagesGenerator, ...]
       static_symlink: true
       static_dir: '%kernel.project_dir%/static/{main_host}'
-      static_copy: ['assets', 'bundles'] # files/folders from public/ to copy
+      static_assets: ['assets', 'bundles'] # files/folders from public/ to copy
 
 # Or globally in config/packages/static_generator.yaml:
 static_generator:
@@ -38,6 +38,55 @@ static_generator:
 ```
 
 _The default generators are compatible with Apache/Litespeed and FrankenPHP/Caddy (generating .htaccess and Caddyfile)._
+
+### `static_symlink`
+
+Controls whether media and assets are symlinked or copied to the static output directory.
+
+| Value | Media | Assets |
+|---|---|---|
+| `true` (default) | symlink | symlink |
+| `false` | copy | copy |
+| `['media']` | symlink | copy |
+| `['assets']` | copy | symlink |
+| `['media', 'assets']` | symlink | symlink |
+
+The most common use case for the array form is `['media']`: symlink media files (fast, saves disk space) while copying assets (so they can be deployed independently).
+
+```yaml
+# Symlink media only, copy assets
+static_symlink: ['media']
+```
+
+When using GitHub Pages (CNAME generator), copy is forced regardless of this setting.
+
+### `static_assets` (formerly `static_copy`)
+
+List of files or folders in your `public/` directory to include in the static output. Default: `['assets', 'bundles']`.
+
+```yaml
+static_assets: ['assets', 'bundles']
+```
+
+The old name `static_copy` still works as a deprecated alias.
+
+### `static_html_max_age`
+
+Cache TTL for HTML pages (in seconds). Default: `10800` (3 hours).
+
+```yaml
+static_html_max_age: 86400 # 24 hours
+```
+
+### `static_html_stale_while_revalidate`
+
+Adds `stale-while-revalidate` to the `Cache-Control` header, allowing CDNs and browsers to serve stale content while revalidating in the background. Set to `0` to disable. Default: `3600` (1 hour).
+
+```yaml
+static_html_stale_while_revalidate: 0 # disabled
+```
+
+Both settings apply to HTML pages only. Static assets (images, JS, CSS, fonts) always use a 1-year TTL.
 
 ## Command
 

@@ -52,10 +52,13 @@ composer require symfony/messenger
 framework:
     messenger:
         transports:
-            async: '%env(MESSENGER_TRANSPORT_DSN)%'
+            async:
+                dsn: 'doctrine://default'  # uses your existing database — no Redis needed
         routing:
             'Pushword\Core\BackgroundTask\RunCommandMessage': async
 ```
+
+> For higher throughput, you can use Redis (`redis://localhost:6379/messages`) or RabbitMQ instead of the Doctrine transport.
 
 3. Run the worker:
 
@@ -67,23 +70,61 @@ The HTMX-based admin polling UI works identically in both modes since existing c
 
 ## Locking Behavior
 
-Commands like `pw:image:cache` use a global flock to prevent concurrent execution. When a second instance is triggered while the first is still running, the behavior depends on the execution mode:
+Commands like `pw:image:cache` use per-file locks to prevent duplicate processing of the same image. When a second instance is triggered for the same file while the first is still running, it skips silently.
 
 ### Process Mode
 
-The second process **silently skips** and exits with code 0. This means work can be lost: if two different images are uploaded at the same time, only the first triggers cache generation. The second is discarded because the lock is global (not per-file).
+Each upload spawns a separate background process. Different files can run concurrently without blocking each other (per-file locks). Under heavy concurrent load, many simultaneous processes may be spawned.
 
 ### Messenger Mode (recommended for production)
 
-With Messenger, tasks are queued and processed sequentially by the worker. Even if two uploads happen simultaneously, both cache generation tasks are dispatched to the message bus. The worker processes them one at a time, so **no work is lost**.
-
-This is the main reason to prefer Messenger mode in production: it guarantees every dispatched task is eventually executed, whereas process mode can silently drop tasks under concurrent load.
+With Messenger, tasks are queued and processed sequentially by the worker. Even if many uploads happen simultaneously, all cache generation tasks are dispatched to the message bus. The worker processes them one at a time, ensuring controlled resource usage.
 
 ```yaml
 # config/packages/pushword.yaml
 pushword:
     background_task_handler: messenger
 ```
+
+## Scheduled Commands
+
+Configure commands that run automatically on specific triggers: when a scheduled page becomes published, or on a cron schedule.
+
+```yaml
+# config/packages/pushword.yaml
+pushword:
+    scheduled_commands:
+        - { command: 'pw:static -i', on: 'publish' }
+        - { command: 'pw:static', on: 'cron: 0 4 * * *' }
+```
+
+Triggers:
+- `publish` — runs when a page with a future `publishedAt` date becomes published
+- `cron: <expression>` — runs on a cron schedule (e.g., `cron: 0 4 * * *` for daily at 4am)
+
+### With Messenger + Scheduler (recommended)
+
+Everything is automatic — no system cron needed. Install the Scheduler component:
+
+```bash
+composer require symfony/scheduler
+```
+
+Then consume the Pushword schedule alongside your async transport:
+
+```bash
+php bin/console messenger:consume async scheduler_pushword
+```
+
+### Without Messenger (process mode)
+
+For `on: publish` triggers, set up a system cron to run `pw:cron` periodically:
+
+```cron
+*/5 * * * * cd /path/to/project && php bin/console pw:cron
+```
+
+For `on: cron:` triggers in process mode, you need to set up the corresponding system crons manually.
 
 ## Media Maintenance Commands
 
