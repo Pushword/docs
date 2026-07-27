@@ -196,9 +196,20 @@ per file would only pile up. A row whose file claims third-party rights shows wh
 imported and from where, so a photographer's name is never stored in a field nobody can
 see.
 
-Because scaling an image down in the browser re-encodes it through a canvas and destroys
-every metadata segment, files that carry rights metadata are uploaded uncompressed. On a
-typical library that is about 1 % of uploads.
+Scaling an image down in the browser re-encodes it through a canvas, and a canvas keeps
+no metadata. Rather than give up the scaling for the files that carry some, the browser
+lifts the segments out beforehand and posts them beside the compressed bytes, in an
+`embeddedMetadata` field.
+
+It forwards them rather than interprets them: the XMP packet, the APP13 block and the
+C2PA manifest travel as they were found, base64 encoded, and the server parses them with
+the same readers it runs on a file it received intact. Only EXIF is read in the browser,
+because `exif_read_data()` wants a file and by then there is none. Nothing about what the
+bytes *mean* is decided twice, so the two paths cannot drift.
+
+What the stored file itself says still wins, property by property — the sidecar only
+fills what the bytes leave empty. It can add to the decision, never overrule it, which is
+what makes it safe to accept from a client.
 
 {id=backfill}
 ## Backfilling an existing library
