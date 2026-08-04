@@ -143,6 +143,13 @@ Double opt-in is a per-audience flag, on by default: the contact is `pending`,
 receives a confirmation mail, and only becomes mailable after clicking. Turn it
 off to import a base that has already consented.
 
+**A contact with no address skips it.** Pending means waiting for a click on a
+link sent by mail, and there is none to send — so a contact keyed on a phone
+number alone is `subscribed` at once, whatever the audience asks. That is not a
+hole in the consent model, it moves the burden: a number entered by hand carries
+the consent of whoever entered it, and `source` records who (`admin:<user>`,
+`import:…`, `api`) — the same evidence a hand-made opt-in already owes.
+
 Every mail carries `List-Unsubscribe` and RFC 8058 one-click, so leaving never
 depends on finding the link in the body. The link in the body is one click too:
 clicking it opts the address out, it does not ask to confirm what was just
@@ -183,6 +190,50 @@ All public links (confirm, unsubscribe) are built from the audience host's
 `base_live_url`, so they keep working when the site itself is statically
 generated.
 
+### Subscribed is not the same as mailable
+
+A contact is keyed on an address **or** on a phone number — a booking taken over
+the phone, a client met on site, a number on a paper form. Both fields are
+optional on their own and at least one is required; `phone` is kept as digits
+and a leading `+`, and is unique per audience like the address.
+
+Consent and reachability then become two questions:
+
+- `subscribed` says they agreed to hear from the site.
+- **mailable** — subscribed *and* holding an address — says a mail can carry it.
+
+Everything that sends asks the second. A contact with no address is never a
+campaign recipient, never enrolled in an automation, and never counted in what a
+send will reach: the audience page, the campaign preview and the API's audience
+payload report `subscribed` and `mailable` side by side, because conflating them
+is how somebody believes a campaign reached 1406 people when it reached 1137.
+
+They are otherwise ordinary contacts — tagged, segmented, exported, and
+filterable with `isSet` / `isNotSet` on `email` and `phone`:
+
+```json
+[{"field": "email", "op": "isNotSet"}]
+```
+
+**No country is inferred.** `+33 6 12 34 56 78` and `+33612345678` are one row;
+`+33 (0)6…` is another, because deciding that the `(0)` is a French trunk prefix
+is a guess, and a wrong guess silently merges two people. Normalise at the
+import if a base needs it.
+
+**An identifier somebody else holds is refused, never moved.** Writing a number
+onto a contact when another row of the same audience already carries it — or an
+address, the same rule read the other way — comes back as `409` from the upsert
+and as a validation error from `PATCH` and the admin form, naming the row that
+holds it. The two rows may well be one person, and that is exactly why somebody
+is writing it; but joining them means deciding which consent record survives and
+which token the unsubscribe links already in inboxes keep working with. That is
+a merge somebody performs deliberately, not the side effect of filling a field
+in. There is no merge operation in the bundle yet: delete one row, or write the
+identifier onto the row you mean to keep.
+
+**The public form stays email-only.** A number reaches the base over the API, or
+through the admin's *Opt in a contact* — never from a page anybody can post to.
+
 ### One contact row per list
 
 A contact belongs to exactly one audience — the pair `(audience, email)` is
@@ -203,8 +254,9 @@ which is what keeps a reader from being mailed twice.
 ### Opting somebody in by hand
 
 **Newsletter → Contacts → Opt in a contact** opens a subscription from the admin:
-pick a list, give an address, and the audience's double opt-in rule decides the
-rest — the confirmation mail goes out exactly as it would from the public form.
+pick a list, give an address or a phone number, and the audience's double opt-in
+rule decides the rest — the confirmation mail goes out exactly as it would from
+the public form. A number alone subscribes at once; there is nothing to confirm.
 Tick *they already consented* only for consent you can produce (a paper form, a
 written reply): it skips the mail and subscribes at once, as `status:
 subscribed` does over the API.
@@ -238,6 +290,7 @@ rule and its stop condition — a flat list of conditions, all of which must hol
 | `createdAt`, `confirmedAt` | `olderThan`, `newerThan` — a duration like `90m`, `6h`, `7d`, `2w` |
 | `prop.<key>` | `=`, `!=`, `isSet`, `isNotSet` |
 | `locale` | `=`, `!=` |
+| `email`, `phone` | `=`, `!=`, `isSet`, `isNotSet` |
 
 An empty list means the whole audience.
 
@@ -319,7 +372,53 @@ double-send. A contact who unsubscribed between arming and sending is skipped,
 which the ledger records as `skipped` rather than as a failure.
 
 **Send test** mails a copy of any campaign to arbitrary addresses with a `[TEST]`
-subject prefix, touching no contact and no counter.
+subject prefix, touching no contact and no counter. Once the campaign carries
+translations it also asks which language to proofread.
+
+### Languages
+
+One campaign carries one body per locale, so an audience spanning several locale
+hosts is mailed once and each reader gets their own language. The alternative —
+one campaign per language, each carrying
+`[{"field":"locale","op":"=","value":"xx"}]` — mails a bilingual reader twice
+and has to be armed eight times.
+
+The **Languages** fieldset holds them as JSON, one entry per locale:
+
+```json
+{
+  "de": {"subject": "Hallo", "preheader": "…", "bodyMarkdown": "Lies das."},
+  "it": {"subject": "Ciao"}
+}
+```
+
+What a given reader is sent is resolved when the mail goes out, in three steps:
+
+1. `translations[<the contact's locale>]`,
+2. otherwise its language part — `de-ch` reads the `de` written once for eight
+   languages over seventeen hosts,
+3. otherwise the campaign's own subject, preheader and body.
+
+Each of the three fields falls back on its own, so translating a subject without
+its body is allowed and means what it looks like. A blank field is not stored at
+all, which is what keeps a locale somebody opened and left alone from mailing an
+empty body. **Nobody ever receives an empty mail**: a missing translation sends
+the default text, and the fieldset says how many of the languages the audience is
+read in are covered before anyone presses Send.
+
+Resolution happens at send, not at arming: a recipient row freezes *who*, never
+*what* — as is already true of `%name%`. Freezing the rendered body per recipient
+would multiply the ledger by the body size for no gain and make fixing a typo
+mid-campaign impossible.
+
+Counters stay per campaign. A campaign is one broadcast; splitting `sentCount` by
+language is a reporting question, answerable from `CampaignRecipient` joined to
+`Contact.locale` if it ever comes up.
+
+The segment stays orthogonal: `locale` remains a segment field, so one campaign
+per market — different offers per market, not the same offer translated — keeps
+working exactly as before. This removes an obligation, it does not impose a
+model.
 
 ### Who it went to
 
@@ -543,6 +642,19 @@ any other, and each carries the automation it came from. They are never
 rewritten: editing the page after the campaign exists changes the article, not
 the mail already queued about it.
 
+**One language per campaign, when there is more than one.** Seventeen locale
+versions of an article are seventeen pages, so a page automation produces
+seventeen campaigns — and `recipientWhen` is one rule for all of them. As soon
+as the audience holds contacts in more than one locale, each campaign's segment
+is narrowed by the language of the page that triggered it, so a reader gets the
+article once rather than once per language. An audience read in a single
+language has nothing to disambiguate and keeps its rule exactly as written.
+
+The narrowing is ANDed onto `recipientWhen`, never replaces it: an `any` group
+is kept whole. Writing `locale` into the rule yourself still works and still
+means what it says — one campaign per market, for editorial reasons rather than
+technical ones, is a model this does not take away.
+
 Three things it will not do:
 
 - **Mail a back catalogue.** `activeFrom`, as above.
@@ -743,11 +855,55 @@ php bin/console pw:newsletter:bounces
 ```
 
 On a shared host this needs nothing else: a bounce is a file, delivered next to
-every other mailbox, so there is no IMAP extension to compile, no webhook to
-expose and no credentials to store. A mailbox that only exists on a remote IMAP
-server is out of scope, the path has to be readable from the filesystem.
+every other mailbox, so there is no extension to compile, no webhook to expose
+and no credentials to store.
 
-What the command does with what it reads:
+### When the mailbox is not on this machine
+
+The filesystem premise holds for a site whose PHP and whose mail live on the same
+host. It fails for the other common arrangement — the app on a VPS or in a
+container, the mail at a provider — where the envelope sender's mailbox is
+reachable by IMAP and by nothing else. Point the command at it instead:
+
+```shell
+composer require webklex/php-imap
+```
+
+```yaml
+newsletter:
+  bounce_imap_dsn: '%env(NEWSLETTER_BOUNCE_IMAP_DSN)%'
+```
+
+```dotenv
+NEWSLETTER_BOUNCE_IMAP_DSN=imaps://bounce%40example.com:secret@imap.example.com:993/INBOX
+```
+
+The folder is optional and defaults to `INBOX`; `imap://` on port 143 uses
+STARTTLS instead. Percent-encode the credentials — a generated password holds
+`@` and `/` often enough that not doing so authenticates as somebody else.
+
+Everything below is unchanged: the same parsing, the same `5.x.x`-only rule, the
+same multi-audience drop. What replaces the `cur/` move is `\Seen`, and the
+command searches `UNSEEN` on the next run — same property, same consequence when
+it fails.
+
+Two caveats a maildir does not have:
+
+- **Set one or the other, never both.** They are two ways to read one mailbox,
+  and configuring both stops the command with a message saying so. The check
+  happens when the command runs rather than when the container builds, because
+  an `%env()%` DSN is still an unresolved placeholder at build time and would
+  read as set whatever the environment holds.
+- **Nothing else may read that mailbox.** That is already the premise — a
+  mailbox nobody reads by hand — but anything that marks messages seen, a webmail
+  session included, takes them out of the command's reach. Pointing the DSN at a
+  real inbox is a temptation a filesystem path never offered.
+
+One thing it does not reproduce: the maildir reads 64 KB off disk per message and
+stops, while IMAP hands back what it asked for in one piece — so a returned
+message still crosses the wire whole, and only the parse is bounded.
+
+### What the command does with what it reads
 
 - it parses the `message/delivery-status` part, never the human-readable one,
   which the remote server writes in its own language and layout,
@@ -758,10 +914,21 @@ What the command does with what it reads:
   the address, not one of the lists,
 - a bounce for somebody on no list is counted and reported, never acted on. The
   same mailbox collects the failures of everything else the app sends,
-- a message it has read is moved to `cur/` with the seen flag, which is what
-  keeps the next run from reading it again. One that cannot be moved is only
-  counted: re-reading it costs nothing, since marking an address that already
-  bounced is a no-op.
+- a message it has read is moved to `cur/` with the seen flag — or flagged
+  `\Seen` over IMAP — which is what keeps the next run from reading it again. One
+  that cannot be marked is only counted: re-reading it costs nothing, since
+  marking an address that already bounced is a no-op.
+
+### Hearing about it
+
+`--notify=ops@example.com` mails the summary, **only when something actually
+moved** — at least one address dropped or one permanent failure recorded. The
+command runs four times an hour; a site that mails its operator every run trains
+them to filter it, which costs the one message that mattered. Zero movement, zero
+mail, and `--dry-run` never mails at all.
+
+The sender is `notification_email_from`, falling back to `noreply@<host>` like
+every other notification the install sends.
 
 A bounced contact is terminal. `resubscribe()` refuses to revive one, because a
 click says nothing about a mail server's refusal; only a new explicit opt-in
@@ -878,12 +1045,16 @@ Posting from another origin needs that origin allow-listed, below.
 newsletter:
   send_batch: 50
   bounce_maildir: /home/user/mail/example.com/bounce
+  # or, when that mailbox only exists on a remote server:
+  # bounce_imap_dsn: '%env(NEWSLETTER_BOUNCE_IMAP_DSN)%'
   newsletter_possible_origins: 'https://example.com https://www.example.com'
 ```
 
 `bounce_maildir` is where `pw:newsletter:bounces` reads delivery failures from,
 the mailbox `framework.mailer.envelope.sender` points at. Null by default, which
-leaves the command with nothing to read.
+leaves the command with nothing to read. `bounce_imap_dsn` reads the same mailbox
+over IMAP when it is not on this machine (see [Bounces](#bounces)); set one or
+the other, never both.
 
 `newsletter_possible_origins` is the CORS allow-list for the subscribe endpoint —
 a statically generated site posts to the origin where PHP runs. It falls back to
@@ -916,7 +1087,9 @@ action, what the site sells.
   `/api/newsletter/contact/{id}/bounce`. A provider's own feedback channel
   (SES→SNS, a Mailgun or Postmark webhook) still needs an adapter that does not
   exist yet. Complaints (FBL) are not ingested by any route.
-- **No SMS.** Contacts are email-keyed; a phone number is a custom property.
+- **No SMS sending.** A phone number is a first-class field and a contact may be
+  keyed on it alone — stored, tagged, segmented, exported over the API. Nothing
+  in the bundle sends to it; a phone-only contact is never a campaign recipient.
 - **No `OR` between the two sides of a broadcast.** `triggerWhen` selects
   subjects, `recipientWhen` selects contacts, and a broadcast is their product:
   each matching page becomes a campaign, sent to the matching contacts. `AND`
