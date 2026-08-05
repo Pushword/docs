@@ -2,6 +2,8 @@
 title: 'CMS Comparison - Pushword vs WordPress, Statamic, Sulu  - Best PHP CMS in date(Y) ?'
 h1: 'Choosing the Right CMS: Pushword vs WordPress, Statamic & Sulu'
 publishedAt: '2025-12-28 17:25'
+parentPage: blog
+template: /page/blog.html.twig
 ---
 
 Choosing the right CMS is a critical decision that affects your project's long-term success, maintenance costs, and team productivity. This comparison examines four PHP-based content management systems, each with distinct philosophies, target audiences, and trade-offs.
