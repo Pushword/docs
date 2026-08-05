@@ -26,7 +26,8 @@ pushword:
   apps:
     - hosts: [example.tld]
       link_improver: true
-      # link_improver_max_links: 0.02   # the default
+      # link_improver_max_links: 0.02     # the default
+      # link_improver_ignored_urls: ['/'] # never a target; empty by default
 ```
 
 ## The keyword map is your content
@@ -51,6 +52,20 @@ as targets, redirections excluded, and a page never links itself.
 
 Choose names accordingly: a page named `Blog` or `Contact` will attract links
 from everywhere its name is written.
+
+`link_improver_ignored_urls` drops pages from the map without touching their
+name, which keeps working everywhere else (breadcrumb, listings). Write the URLs
+as the report prints them — `/` for the homepage, `/slug` otherwise:
+
+```yaml
+link_improver_ignored_urls: ['/', '/contact']
+```
+
+The homepage is the usual candidate: its name is often the brand, written on
+nearly every page. On a real site, that alone took 44% of the inserted links.
+Whether that is what you want is an editorial call — a branded anchor next to
+the header link is fine for many sites; ignoring it spends the budget on
+topical targets instead.
 
 ## What it will not do
 
