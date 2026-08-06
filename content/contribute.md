@@ -7,6 +7,8 @@ toc: true
 
 Source code is host on #[{{ svg('github') }} github](https://github.com/Pushword/Pushword).
 
+Looking for help with your own site rather than to contribute? See [getting help](/pro).
+
 ## Signal an issue
 
 Use the #[github issue tracker](https://github.com/Pushword/Pushword/issues) to signal an issue.
@@ -31,7 +33,7 @@ See [Code Architecture > Development environment](/architecture#development-envi
 
 The docs is inside the main repo, you will find write in markdown in #[packages/docs/content](https://github.com/Pushword/Pushword/tree/main/packages/docs/content).
 
-On each PR, the docs is compiled for the current release and published [pushword.piedweb.com](/) by a github action.
+On each push to `main`, a github action compiles the docs and publishes it on [pushword.piedweb.com](/). Nothing to run by hand: what fails the build (a page that does not render) fails the action, and nothing is published.
 
 ## Pull Requests
 

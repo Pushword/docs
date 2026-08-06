@@ -18,25 +18,27 @@ opposite starting points. So which one should you choose for your next project, 
 
 ## The short answer
 
-Most of this page is nuance. The decision usually is not.
+Most of this page is nuance. The decision usually is not, and one question settles it:
+**will anyone other than a developer ever need to publish?**
 
-**Pick Astro if** your content is written by developers in the repository, your team lives
-in JavaScript, or you want React/Svelte/Vue components on the page. It is a mature,
-excellently designed tool with an ecosystem Pushword cannot match, and for that shape of
-project it is the better choice.
+**If no** — content is written by developers, in the repository, and that will not change —
+pick Astro and stop reading. It is mature, excellently designed, and has an ecosystem
+Pushword cannot match. Its single authoring surface is simpler than anything here, and
+simpler wins.
 
-**Pick Pushword if two or more of these describe you:**
+**If yes, Pushword is the better default**, because at that moment the honest comparison
+stops being Astro and becomes **Astro plus a headless CMS**: two systems to run, secure and
+upgrade, a second bill, and a preview environment to wire up and keep working.
+[Comparing like for like](#comparing-like-for-like) prices that out properly.
 
-- Someone who is not a developer needs to publish, and you would rather not run a second
-  system to let them
+These do not gate the decision — each one simply widens the gap, and teams that have one
+usually have several:
+
 - Your team already writes PHP or Symfony
 - You run several sites or locales that share templates and code
 - Editors expect a change to be live seconds after saving, not after a CI run
 - AI agents write or maintain part of your content
 - You want content and code in your own git, with no content vendor in the path
-
-If you recognised yourself in that second list, the rest of this page is detail. If you
-recognised yourself in the first, Astro is a genuinely great answer and you can stop here.
 
 ---
 
@@ -468,24 +470,19 @@ content as Markdown on a disk you own — that is what Pushword is for.
 - **Pushword**: [pushword.piedweb.com](https://pushword.piedweb.com) · [github.com/Pushword/Pushword](https://github.com/Pushword/Pushword)
 - Related: [CMS comparison — Pushword vs WordPress, Statamic, Sulu](/blog/cms-comparison)
 
-<div class="not-prose p-4 mb-8 bg-blue-50 dark:bg-blue-900/30 rounded-lg shadow">
-  <p class="text-sm text-blue-800 dark:text-blue-200">
-    <strong>About this comparison</strong><br>
-    Written by the Pushword author (and Claude). We are obviously not neutral, and Astro is
-    a far more widely adopted project with a much larger community than Pushword. Claims
-    about Astro are based on its official documentation and release notes as of August 2026;
-    claims about Pushword are based on shipped features, not roadmap, and its release count
-    and test figures are checkable on Packagist and GitHub. Where Pushword adopted an idea
-    from Astro, we have said so.<br>
-    <span class="text-xs">Found an error, or think we have been unfair to Astro? <a href="https://github.com/Pushword/Pushword/issues" class="underline">Open an issue</a> — corrections are welcome.</span>
-  </p>
-</div>
+> [!note] About this comparison
+>
+> Written by the Pushword author (and Claude). We are obviously not neutral, and Astro is
+> a far more widely adopted project with a much larger community than Pushword. Claims
+> about Astro are based on its official documentation and release notes as of August 2026;
+> claims about Pushword are based on shipped features, not roadmap, and its release count
+> and test figures are checkable on Packagist and GitHub. Where Pushword adopted an idea
+> from Astro, we have said so.
+>
+> Found an error, or think we have been unfair to Astro? [Open an issue](https://github.com/Pushword/Pushword/issues) — corrections are welcome.
 
-<div class="not-prose p-4 mt-8 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800">
-  <p class="text-sm text-amber-800 dark:text-amber-200">
-    <strong>Version</strong><br>
-    Last updated: August 2026. Reflects Astro 7.0 (22 June 2026) and Pushword's render epoch,
-    declared page properties and view transitions. Both projects move quickly; updates
-    welcome via GitHub issues.
-  </p>
-</div>
+> [!warning] Version
+>
+> Last updated: August 2026. Reflects Astro 7.0 (22 June 2026) and Pushword's render epoch,
+> declared page properties and view transitions. Both projects move quickly; updates
+> welcome via GitHub issues.
