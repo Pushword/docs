@@ -208,6 +208,106 @@ All public links (confirm, unsubscribe) are built from the audience host's
 `base_live_url`, so they keep working when the site itself is statically
 generated.
 
+### The consent ledger
+
+The dates on a contact say where things stand. `confirmedAt` keeps the first
+confirmation, `unsubscribedAt` and `bouncedAt` the last of each, and a new
+opt-in clears those two — so somebody who subscribed, left, came back and left
+again shows one departure. That is a state, and article 7(1) GDPR asks for
+something else: that the site be able to *demonstrate* consent was given.
+
+Every act that moves a subscription therefore appends a row nobody edits and
+nobody deletes — **opted in**, **confirmed**, **unsubscribed**, **put back**,
+**bounced** — each with when it happened and where it came from. The *Consent
+history* panel on the contact page reads them oldest first; it is what a
+complaint is answered with.
+
+Provenance is that moment's, never the subscription's: the page slug or the
+`source` a caller sent for an opt-in, `link` for anything done through a token
+link in a mail, `admin:<user>` for an editor, `api`, `mailbox` for an address a
+mail server refused. **Only the acts that give consent carry a host and an IP** —
+they are what a disputed opt-in is answered with, and nobody ever asks a site to
+prove somebody left. An editor confirming a contact by hand records neither: the
+IP would be the editor's, and reading it back later as the contact's is worse
+than having none.
+
+Two consequences worth knowing. A **merge** moves the absorbed row's history
+onto the survivor — both rows were the same person, and a merge that dropped
+half the evidence would be a deletion wearing another name. **Deleting a
+contact** takes their ledger with it, which is what an erasure request means.
+
+The ledger starts at the release that introduced it: subscriptions older than
+that show an empty panel, and their contact dates remain all there is.
+
+#### Splitting an audience in two
+
+`ContactManager::splitFrom($contact, $target)` carries a live subscription onto
+a second list — one brand's readers divided in two, a locale given its own
+audience. It is where the two planes have to be told apart, and confusing them
+destroys evidence in one direction or the other:
+
+| | carries | why |
+|---|---|---|
+| **State** — `confirmedAt`, `source`, `optinHost`, `optinIp`, `clickTrackingConsentAt` | the origin's, unchanged | the partition *divides* a consent, it does not renew it. Stamping today's date would erase the only date worth producing. |
+| **Ledger** — one `split:<origin slug>` row | today's date, no host, no IP | the act performed today is the making of a row. Nobody consented to anything, so nothing here is antedated and no place is recorded. |
+
+The target audience must already exist — its host, its sender, its double opt-in
+rule and its vocabulary are editorial decisions, not something a loop improvises.
+Interests come over only where the second list declares them; the new row mints
+its own token, so each list's unsubscribe link governs its own list.
+
+Two rules that matter to a switch-over run as a batch. It is **idempotent** — a
+row already on the target comes back untouched *whatever its status*, so a second
+pass never raises somebody who has since left it. And it carries **only a
+subscribed contact**: a pending one has no consent to divide yet, and copying it
+ahead of its confirmation would make a row that can never become mailable, having
+no confirmation of its own to send. Such a contact reaches the second list when
+they answer the first one's — which a listener on the transition to `subscribed`
+handles, not the batch.
+
+Anything else is refused rather than worked around: a contact who is not
+subscribed, and a target that is the list they are already on. Both throw
+`InvalidArgumentException` — the second because, left to the idempotence lookup,
+a mistyped audience would hand back the origin contact itself and read as a
+success.
+
+**A long run owes one re-check.** A batch resolves its subscribed set up front,
+and somebody who leaves while it is still running will throw on their turn.
+That is the right outcome — they just withdrew, and no row should be made for
+them — so test `isSubscribed()` immediately before the call and catch per
+contact, counting what you skipped. A run that reports "18 withdrew mid-pass"
+is worth more than one that dies, and worth much more than one that quietly
+carries them over.
+
+### Mail with no way out
+
+Some mail is not a newsletter. An order confirmation, a booking reminder, a
+password reset — a service message answering something the person did — owes no
+unsubscribe link, and offering one on it is offering to break something they
+asked for.
+
+**Transactional** is a checkbox on the audience, on a campaign and on an
+automation. It drops the unsubscribe link from the HTML foot, from the text foot
+and the `List-Unsubscribe` headers with it — one value governs the three, so a
+mail cannot end up keeping the header and losing the link. The postal address is
+untouched: it says who wrote, not how to leave.
+
+The three levels are one `OR`. The audience's own flag covers everything it
+sends and neither of the other two can take it back; a campaign or an automation
+carrying it claims only itself. A broadcast copies its automation's flag onto
+each campaign it schedules, so the campaign waiting in the admin says what it is
+about to send. **Send test** reflects it too.
+
+Two things it does not change. The recipients are still resolved the ordinary
+way — subscribed, mailable contacts of the audience — so this removes the way
+out of a mail, it does not open a channel to people who left. And it is a claim
+about the mail, not a setting that makes one true: on anything promotional,
+sending without a way out is unlawful under the GDPR and CAN-SPAM alike, and
+inboxes treat bulk mail carrying no `List-Unsubscribe` as unattributed, so it
+costs deliverability on everything else that audience sends. Prefer a separate
+audience for service mail: it is also the only kind allowed to leave the
+audience's postal address empty.
+
 ### Subscribed is not the same as mailable
 
 A contact is keyed on an address **or** on a phone number — a booking taken over
@@ -265,10 +365,11 @@ It keeps its id, its token, its status and its consent dates, and it gains:
   the kept row is not overruled,
 - the tags, added to its own,
 - the custom properties it was missing,
-- every campaign, enrollment and drip step either row was sent. A merge costs no
-  history; that is what makes it something other than deleting a row. Where both
-  rows have a line for the same campaign or the same run of an automation, the
-  kept row's own line stays and the duplicate goes.
+- every campaign, enrollment and drip step either row was sent, and both
+  [consent ledgers](#the-consent-ledger). A merge costs no history; that is what
+  makes it something other than deleting a row. Where both rows have a line for
+  the same campaign or the same run of an automation, the kept row's own line
+  stays and the duplicate goes.
 
 Only an addressed row and a phone-only row can be joined. **Two addresses are two
 people** until somebody says otherwise, and no rule can pick which of the two
