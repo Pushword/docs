@@ -6,8 +6,8 @@ parentPage: upgrade
 
 <!--
 The upgrade note for the next release. `.scripts/release` renames this file to
-`upgrade/rc<N>.md`, adds its row to the table in `upgrade.md` and empties it back
-to this scaffold, at the tag.
+`upgrade/<version>.md`, adds its row to the table in `upgrade.md` and empties it
+back to this scaffold, at the tag.
 
 Write here, in the same commit as the change, whenever a release asks something of
 a site that upgrades: a command to run, a config key to set, a template to copy, a
