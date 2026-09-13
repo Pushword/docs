@@ -346,11 +346,19 @@ pushword_page_scanner:
   parallel_batch_size: 50                  # URLs checked in parallel per batch
   url_check_timeout_ms: 10000             # timeout per external URL check (ms)
   skip_external_url_check: false           # skip external URL validation
+  native_page_facts: null                  # optional Rust worker executable path
+  native_page_facts_timeout: 5.0          # worker timeout in seconds
   links_to_ignore:                         # glob patterns for links to skip
     - 'https://www.example.tld/*'
     - '/admin/*'
   errors_to_ignore: []                     # findings to suppress, see below
 ```
+
+The native worker is experimental and opt-in. It prepares link candidates from
+rendered HTML, including obfuscated and responsive-image URLs, and extracts
+image-alt labels, anchors and unresolved date shortcodes. The PHP scanners remain
+the fallback. See
+[optional Rust acceleration](/native-acceleration) for build and deployment instructions.
 
 ## Ignoring a finding
 

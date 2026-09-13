@@ -7,7 +7,7 @@ toc: true
 
 ## Requirements
 
-- **PHP** >=8.4
+- **PHP** 8.5
 - **PHP extensions** : dom, curl, libxml, mbstring, zip, pdo, bcmath, intl, gd (or imagick), exif, iconv, fileinfo; plus `sqlite` and `pdo_sqlite` for SQLite, or `pdo_pgsql` for PostgreSQL
 - **Composer** - [how to install composer](https://getcomposer.org/download/)
 
@@ -22,7 +22,7 @@ _Facultative_ :
 ## Automatic installer via composer
 
 ```shell
-composer create-project pushword/new pushword "^1.0"
+composer create-project pushword/new pushword
 cd pushword
 ```
 
@@ -40,7 +40,7 @@ database first and pass its URL to the installer:
 
 ```shell
 PUSHWORD_DATABASE_URL='postgresql://pushword:secret@127.0.0.1:5432/pushword?serverVersion=17&charset=utf8' \
-  composer create-project pushword/new pushword "^1.0"
+  composer create-project pushword/new pushword
 ```
 
 For an existing project, set `DATABASE_URL` in `.env.local`, then run
@@ -113,6 +113,15 @@ composer req pushword/page-update-notifier # email alert when a page changes
 ```
 
 Each one registers its own routes and config on install — nothing to wire by hand.
+
+To install all maintained Pushword bundles in an existing site instead, run:
+
+```shell
+composer require "pushword/pushword:^1.0"
+```
+
+This is the combined bundle package; use `pushword/new` above to create a site.
+
 The Search extension keeps its own rebuildable SQLite index even when Doctrine uses
 PostgreSQL, so it still requires `pdo_sqlite`.
 

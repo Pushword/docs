@@ -17,7 +17,7 @@ raw: 1
     Finally, a CMS that gets out of your way.
   </h1>
   <p class="text-xl leading-relaxed text-stone-600 dark:text-stone-300 max-w-2xl mb-10">
-    Modern PHP. Flat-file flexibility. Ready for the AI era. <span class="text-stone-900 dark:text-stone-100 font-medium">No plugin headache.</span>
+    Modern PHP, with <span class="text-stone-900 dark:text-stone-100 font-medium">optional Rust acceleration.</span> Flat-file flexibility. Ready for the AI era.
   </p>
   <div class="flex flex-wrap gap-3 items-center">
     <a href="/installation" class="inline-flex items-center px-5 py-2.5 bg-stone-900 text-stone-50 text-sm font-medium rounded-md hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300">
@@ -33,11 +33,30 @@ raw: 1
 
 </div>
 
-<div class="max-w-5xl mx-auto px-6 mb-24">
+<div class="max-w-5xl mx-auto px-6 mb-16">
   <figure class="rounded-lg border border-stone-200 dark:border-stone-800 overflow-hidden bg-white dark:bg-stone-900">
     <img src="/media/admin-blockeditor.png" alt="Pushword block editor" class="w-full">
   </figure>
   <figcaption class="mt-4 text-center text-sm text-stone-500 dark:text-stone-500">Powering documentation, marketing pages, and content-driven apps for teams who value clean code.</figcaption>
+</div>
+
+<div class="max-w-5xl mx-auto px-6 mb-4">
+  <section class="grid md:grid-cols-2 gap-8 md:gap-12 rounded-lg bg-stone-900 px-6 py-10 md:px-12 md:py-12 text-stone-100">
+    <div>
+      <p class="text-sm font-medium tracking-widest uppercase text-[oklch(70%_0.13_35)] mb-3">Optional native acceleration</p>
+      <h2 class="text-3xl md:text-4xl font-semibold tracking-tight mb-4">Rust for the expensive work.</h2>
+      <p class="text-stone-300 leading-relaxed mb-6">PHP runs the CMS. Opt-in Rust workers handle selected heavy work, while PHP remains the default and fallback.</p>
+      <a href="/native-acceleration" class="inline-flex items-center gap-2 text-sm font-medium text-stone-100 underline underline-offset-4 hover:text-[oklch(80%_0.13_35)]">Explore Rust acceleration <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="flex flex-col justify-center">
+      <p class="text-sm text-stone-400 mb-4">Experimental integrations for</p>
+      <ul class="space-y-3 text-stone-100">
+        <li class="border-t border-stone-700 pt-3">Content analysis</li>
+        <li class="border-t border-stone-700 pt-3">Eligible Markdown conversion</li>
+        <li class="border-t border-stone-700 pt-3">Static HTML minification</li>
+      </ul>
+    </div>
+  </section>
 </div>
 
 <div class="max-w-3xl mx-auto px-6">
@@ -60,7 +79,7 @@ raw: 1
       <span class="font-mono text-2xl font-light tabular-nums text-[oklch(45%_0.13_35)] leading-none pt-1">02</span>
       <div>
         <dt class="text-lg font-semibold mb-2 text-stone-900 dark:text-stone-100">Cutting-edge stack</dt>
-        <dd class="text-stone-600 dark:text-stone-300">PHP 8.4, Symfony 8, Doctrine 3, Tailwind 4. Modern features, PHPStan enforced.</dd>
+        <dd class="text-stone-600 dark:text-stone-300">PHP 8.5, Symfony 8, Doctrine 3, Tailwind 4. Modern features, PHPStan enforced.</dd>
       </div>
     </div>
 
