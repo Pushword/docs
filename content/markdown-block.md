@@ -7,7 +7,7 @@ toc: true
 
 Which Markdown specification is used in Pushword — _CommonMark_, _GFM_, or _something else_?
 
-The default Markdown implementation in **Pushword** is based on **CommonMark**, with a few customizations designed to make it easy to switch between Markdown and a WYSIWYG block editor.
+**Pushword** renders CommonMark-style Markdown with Tempest and custom rules designed to make it easy to switch between Markdown and a WYSIWYG block editor.
 
 ## For users
 
@@ -37,7 +37,7 @@ Both filters mark their output HTML-safe and pass raw inline HTML through as-is.
 
 Consecutive blocks can be wrapped in a single `<div>` by placing an opening and a
 closing tag as blocks of their own (blank-line separated). The markdown between the
-two lines is rendered normally — CommonMark passes the wrapper through as-is:
+two lines is rendered normally — the renderer passes the wrapper through as-is:
 
 ```markdown
 <div id="pricing" class="grid md:grid-cols-2">
@@ -98,8 +98,9 @@ same line.
 ```
 
 - **The label is free.** `note`, `tip`, `important`, `warning` and `caution` ship with
-  a palette; any other label (`sponsored`, `deprecated`…) renders neutral and is yours
-  to style — the wrapper always carries `notice notice-<label>`.
+  a palette, `question` with a component of its own (below); any other label
+  (`sponsored`, `deprecated`…) renders neutral and is yours to style — the wrapper
+  always carries `notice notice-<label>`.
 - **The title is optional.** Without one, the label is displayed instead (`[!note]` →
   "Note"), so the level never rests on colour alone.
 - **The body is ordinary Markdown** — paragraphs, lists, links, images.
@@ -111,6 +112,28 @@ same line.
 
 A blockquote that does not open with a marker stays a plain blockquote, so quoting
 someone is unaffected.
+
+### A folded question
+
+`> [!question]` has a component of its own: the answer folds into a `<details>`, and the
+notice carries [schema.org](https://schema.org/Question) microdata — the title as `name`,
+the body as the `text` of an `acceptedAnswer`.
+
+```markdown
+> [!question] Can luggage be carried between night stops?
+>
+> Wherever a road serves the night stop, yes — it works on the Tour du Mont-Blanc.
+```
+
+The answer stays in the HTML while folded, so find-in-page reaches it — browsers open a
+`<details>` on a match — and so does a crawler.
+
+The `Question` is a top-level microdata item rather than the `mainEntity` of a `FAQPage`:
+a notice is rendered into a cache keyed by its Markdown alone and shared by every page, so
+it cannot know whether the page around it is a FAQ. Declaring the page one — on a site
+where a page carrying questions is a FAQ and nothing else — means adding
+`itemprop="mainEntity"` to your own `component/notice/question.html.twig` and the
+`itemscope itemtype="https://schema.org/FAQPage"` scope to the content container.
 
 ### A component per label
 
