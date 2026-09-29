@@ -18,7 +18,7 @@ The difference is almost invisible — your usual Markdown syntax will continue 
 Markdown content is **parsed block by block**, rather than as a single document.
 Blocks are **separated by two blank lines**.
 
-**Attributes** can be defined using the syntax `{#attribute-name}`, placed on a separate line just **before** the Markdown block it applies to. _This is conflicting with Prettier Markdown._
+**Attributes** can be defined using the syntax `{#attribute-name}`, placed on a separate line just **before** the Markdown block it applies to. For a paragraph, `{.ico-tip} Text with **emphasis**` also works on one line. _The separate-line form is conflicting with Prettier Markdown._
 
 Advanced content types such as **galleries**, **attachments**, or **page lists** are supported through **Twig functions**.
 
@@ -223,6 +223,8 @@ HTML, applied by the `Typography` entity filter after markdown rendering.
 `pre`, `code`, `script`, `style`, `svg` and comments are left untouched, and
 the flat export straightens any typographic quote or non-breaking space that
 found its way into a page, so `.md` files remain greppable and diff-friendly.
+Code and Twig tags (`{{ }}`, `{% %}`) keep their bytes: a straightened `’`
+would close a single-quoted Twig string.
 
 Disable it per page with `filter_typography: 0` in the front matter, or
 per site by overriding the `filters` config key.
