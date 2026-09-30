@@ -631,6 +631,32 @@ My Page content Yeah !
 - Unknown properties are stored in `customProperties`
 - `mainImage` references a media filename (not a path)
 
+### Dates and time zones
+
+The export writes `publishedAt` and `holdPublicationAt` in the editorial timezone, with
+its offset: `publishedAt: '2026-09-30 16:00+02:00'`. The offset pins the instant, so a
+file that goes out and comes back never shifts.
+
+- A date with an offset is stored at that exact instant.
+- Quotes are optional: `publishedAt: 2026-09-30` reads like `publishedAt: '2026-09-30'`.
+- A date without one is read in the editorial timezone. The hour the autumn change shows
+  twice (`2026-10-25 02:30` in Paris) is its first occurrence, summer time: add `+01:00`
+  for the second. An hour the spring change skips moves forward by an hour.
+
+The editorial timezone defaults to the server's (PHP's `date.timezone`, UTC on most hosts).
+Set it to read and write dates on your editors' clock — the admin's date fields, its
+publish-now and schedule buttons and its list columns follow it too:
+
+```yaml
+pushword:
+    editorial_timezone: Europe/Paris
+```
+
+The database stays in the server timezone: leave `date.timezone` alone. On an existing
+site, set the key last: `pw:flat:sync` to take in pending file edits, then
+`pw:flat:sync --mode=export --force` so every date carries its offset. A date left
+without one shifts on its next import.
+
 ### Translations (hreflang) Sync
 
 The `translations` property handles the bidirectional many-to-many relationship between pages for internationalization (hreflang).

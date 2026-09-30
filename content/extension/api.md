@@ -37,6 +37,10 @@ curl -H "Authorization: Bearer $TOKEN" https://example.com/api/page/search
 - **Frontmatter + body.** A page is split into `frontmatter` (all metadata: `h1`, `title`,
   `locale`, `tags`, `parentPage`, `translations`, `mainImage`, `customProperties`, …) and
   `body` (the `mainContent` Markdown), mirroring the flat-file format.
+- **Dates.** `publishedAt` and `holdPublicationAt` take ISO 8601 or the flat
+  `2026-09-30 16:00`. An offset is kept to the instant; a date without one is read in the
+  [editorial timezone](/extension/flat#dates-and-time-zones). Reads return both on that
+  clock, offset included: `2026-09-30T16:00:00+02:00`.
 - **Optimistic concurrency.** Each page carries an opaque `revision` (also sent as the
   `ETag` header). Writes must send `If-Match: <revision>`; a stale value yields `409`.
 - **Token-efficient responses.** Writes return a minimal body by default; reads return the
@@ -275,6 +279,13 @@ been normalized (e.g. `"Qui Sommes-Nous"` → `"qui-sommes-nous"`).
 The new `revision` is also in the `ETag` header. Add `?return=full` to get the complete
 page payload (same shape as `GET`) instead.
 
+A write that leaves `publishedAt` in the future says the page is not online yet, with the
+date in the [editorial timezone](/extension/flat#dates-and-time-zones), in both shapes:
+
+```json
+{ "revision": "9f1c…", "updatedAt": "…", "scheduled": true, "publishedAt": "2026-09-30T16:00:00+02:00" }
+```
+
 When the host declares [page properties](/page-properties), a successful write may also
 carry a `warnings` object — `undeclared` (custom property keys the schema does not know,
 the net that catches a `toc_titel` typo) and `missingRequired`. Informational only: the
@@ -470,6 +481,7 @@ skips on purpose:
 | `publication_on_hold`    | `holdPublicationAt` keeps the current file in place     |
 | `page_is_a_redirection`  | It is an entry in the host-wide redirect map, not a file |
 | `cache_disabled_for_page`| The page opted out with `cache: false`                  |
+| `error_page_not_cached`  | In cache mode, PHP serves the error page with its 404 status |
 | `generation_running`     | A whole-site pass is running — poll its `statusUrl` first |
 
 A page that fails to render answers `500` with the reason in `errors`.
