@@ -13,8 +13,8 @@ Generate CSV indexes of your pages and media for AI tools and content discovery.
 php bin/console pw:ai-index [host] [exportDir]
 ```
 
-- `host` — optional, filter pages by host. Omit to export all pages.
-- `exportDir` — optional, output directory. Defaults to the flat-file content directory for the host, or `var/export/` if flat is not configured.
+- `host` — optional, the site whose pages are exported. Omit it, or pass `""`, to export every site.
+- `exportDir` — optional, output directory. Defaults to the flat-file content directory of the host (the default site when no host is given), or `var/export/` if flat is not configured.
 
 ## Output
 
@@ -31,6 +31,7 @@ php bin/console pw:ai-index [host] [exportDir]
 | parentPage | Parent page slug |
 | pageLinked | Other page slugs linked from content |
 | length | Character count of mainContent |
+| host | Site the page belongs to |
 
 ### medias.csv
 
@@ -47,7 +48,7 @@ php bin/console pw:ai-index [host] [exportDir]
 # Export pages for a specific host
 php bin/console pw:ai-index altimood.com
 
-# Export all pages to a custom directory
+# Export every site to a custom directory
 php bin/console pw:ai-index "" /tmp/pushword-export
 ```
 
@@ -55,4 +56,4 @@ Both usage columns are read from the stored media↔page relation — see
 [Media usage](/media-usage). A site that has never run `pw:media:usage:rebuild`
 exports them empty.
 
-The CSV files use comma delimiters and double-quote enclosure. Feed them to your AI agent for content analysis, link graph extraction, or editorial audits.
+The CSV files use comma delimiters and double-quote enclosure.
