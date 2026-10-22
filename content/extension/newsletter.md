@@ -439,26 +439,70 @@ asks which language to send.
 
 ### Email design and live preview
 
+In **Newsletter → Templates**, choose **Create template**. Give it a name, edit
+the Markdown header and footer, and switch the frame on or off. New templates
+start with a `**%siteName%**` header and a `© %year% %siteName%` footer. Save the
+template to make it available in campaign and audience design choices.
+**Duplicate** opens a prefilled copy; the original is preserved, and the copy is
+created only when saved.
+
+Saved templates are reusable across audiences; their tokens resolve against
+the audience's site when sending. Editing a saved template updates every
+audience or campaign that selects it. Choose **Duplicate** for a separate design.
+Templates supplied as Twig files remain selectable alongside saved templates.
+
+The campaign form starts with **Choose the audience and design**. Select the
+audience, then choose **Design for this campaign**: inherit the audience's design,
+use a standard layout, or select a saved template or Twig preset. The effective
+design is shown below the choice and updates when the audience changes. The
+campaign's choice applies to real and test sends without changing the audience
+or its automations.
+
+Campaign creation and editing show a live email preview beside the form. It
+uses the unsaved audience, design, subject, preview text, body and transactional
+setting, with Alex as the sample recipient. Selecting an audience starts the
+preview. Narrow screens have a **Write newsletter / Live preview** switch that
+preserves the form's edits.
+The **Create or manage templates** link opens another tab. Returning to the
+campaign refreshes its template choices without discarding the draft.
+
 In **Newsletter → Audiences**, open **Email design** for the audience. Choose
 **Without a frame** for a simple email or **With a frame** for centered content
-on a light gray background. The audience's Markdown header and footer are shared
-by its campaigns and automation emails; both layouts keep them.
+on a light gray background, or select a saved template or Twig preset. Standard
+layouts use the audience's editable Markdown header and footer; saved templates
+and Twig presets supply their own. From a campaign, the shared-design link opens
+the selected saved template or the audience settings in another tab. Changes
+affect every campaign and automation that uses those settings.
 
-The live preview uses the same renderer as sending, with Mobile selected by
-default and a Desktop option. Edit the sample content to check your design
-without creating a campaign.
-Previewing does not save, subscribe a contact or send mail. **Save email design**
-applies the settings. Email clients may render the same HTML differently.
+New audiences start with `**%siteName%**` as the header and
+`© %year% %siteName%` as the footer. These values resolve against the sender's
+site and the current year in both HTML and plain text. Existing saved designs
+are preserved. **Restore site name and copyright** applies these defaults to
+the editable fields; clearing either field deliberately removes that part.
+
+All design and campaign previews use the sending renderer and update while
+typing. **Mobile 375** is selected by default; **Desktop 600** is also available.
+Previewing never saves, creates contacts or sends mail. In the audience design
+editor, narrow screens have a **Design settings / Live preview** switch and a
+horizontally scrollable preview
+at its rendering width. Sample content changes only the preview; **Save email
+design** applies the design settings. Unsaved design edits are indicated
+separately from preview freshness, and leaving the page warns before discarding
+them. A failed preview keeps the last rendering and offers **Try again**. Email
+clients may render the same HTML differently.
 
 The unsubscribe link and postal address remain automatic. An occurrence's
 `SendContext.footerMarkdown` overrides the audience footer, including an empty
-override. Existing audiences keep the simple layout and empty header/footer.
+override. A null footer inherits the selected design; `SendContext::fromAudience`
+uses that value for saved templates.
 Sites overriding `/newsletter/email.html.twig` receive `wrapped` and `header`
 alongside the existing `body` and `footer` variables and control their own layout.
+Templates also receive `siteName` and `year` for site-owned branding.
 
 #### Preconfigured Twig designs
 
-Register a fixed design in `config/packages/newsletter.yaml`:
+Register one entry per fixed design in `config/packages/newsletter.yaml`. Several
+presets can coexist for the same site:
 
 ```yaml
 newsletter:
@@ -466,10 +510,16 @@ newsletter:
     brand:
       label: 'Brand newsletter'
       template: 'newsletter/brand.html.twig'
+    letter:
+      label: 'Brand letter'
+      template: 'newsletter/letter.html.twig'
 ```
 
-It appears alongside the two built-in layouts in **Email design**. The choice is
-saved per audience and uses the same Twig template for preview and sending.
+Both entries appear alongside the two built-in layouts in **Email design** and
+**Design for this campaign**. **Newsletter → Templates** also lists these site
+designs with a read-only preview. Each entry needs its own ID and label; adding a
+file to `templates/newsletter/` alone does not add a choice. Clear the Symfony
+cache after changing configuration.
 The editable header and footer are hidden while a preset is selected; their
 values are retained when switching back to a built-in layout.
 
@@ -497,9 +547,12 @@ sender information without the hidden editable header and footer. An explicit
 `SendContext.footerMarkdown` remains available in `footer` and in the text part;
 a preset decides whether to include `footer` in its HTML block.
 
-The development app includes a **Pushword (Twig)** example in
-`packages/dev-app/config/packages/newsletter.php` and
-`packages/dev-app/templates/newsletter/pushword.html.twig`.
+The development app registers three examples in
+`packages/dev-app/config/packages/newsletter.php`: **Pushword Classic** (framed),
+**Pushword Letter** (unframed, with a serif heading) and **Pushword Bulletin**
+(framed, with a dark masthead). Their files live in
+`packages/dev-app/templates/newsletter/`. Each defines its own site-name header
+and copyright footer while inheriting the automatic sender information.
 
 ### Email Markdown
 
@@ -579,6 +632,11 @@ day after it goes out". An automation has:
 - **`triggerWhen`** — which of that source's subjects start the sequence,
   written in the source's own vocabulary;
 - **steps** — the mails, in order, each after its own delay.
+
+Open **Preview this email** under any step to see its unsaved subject and Markdown
+with the selected audience's email design. The preview starts at mobile width;
+it does not save the automation or send an email. Trigger-specific placeholders
+remain in the sample until a real event supplies their values.
 
 Two sources ship with the bundle (contacts and pages); a bundle of yours can add
 more (see [Custom trigger sources](#custom-trigger-sources)).
@@ -1001,6 +1059,44 @@ canonical base URL before sending.
 
 Attribution is aggregate and records nothing per person; per-reader clicks are
 the next section.
+
+## Statistics
+
+Open **Newsletter → Statistics** for campaign results, filtered by audience and
+date range (the last 30 days by default). The comparison links to each campaign's
+report, its recipient ledger and its recorded links. **Export CSV** exports the
+same applied campaign selection, including counts and rates. Use the 7/30/90-day
+shortcuts or edit the date range; validation errors stay with their fields. Reset
+returns to all audiences and the last 30 days. The comparison adapts to stacked
+rows on small screens, keeping engagement and reported issues visible.
+
+The overview prioritizes sends, unique clickers and observed click rate. The
+campaign report separates sending states from recipient feedback and ranks links
+by unique clickers. Detailed measurement notes are under **How to read these
+figures**. Browser zoom remains available.
+
+The date filter selects campaigns by their first transport handoff, or completion
+date when no recipient record remains. A campaign still sending appears after its
+first handoff. Results are cumulative to date, including clicks and bounces that
+arrived after the selected period, rather than events restricted to that period.
+Dates use `pushword.editorial_timezone`.
+
+- **Sent** counts messages handed to the mail transport. It does not confirm
+  reception in an inbox. Bounces and transport failures are separate counts.
+- **Unique clickers** count a contact once per campaign, including in the overall
+  total. Rates use sent messages as their denominator; the overall rate uses the
+  combined counts, rather than averaging campaign percentages. Sends without
+  tracking remain in that denominator, so click rates describe observed engagement.
+- Click tracking still requires the audience switch and the contact's consent.
+  Untracked campaigns have no measured click rate. The cumulative click counter
+  survives consent withdrawal; unique clicks and link details use the retained
+  events and may decrease after withdrawal or contact deletion. Bots are not filtered.
+- **Audience health today** is a current subscription snapshot, independent of
+  the selected dates. **Subscription activity** counts consent-ledger events in
+  the selected period. A signup request and its confirmation are separate events,
+  not two new subscribers. A person subscribed to two audiences counts twice.
+
+Inbox delivery, opens, spam complaints, conversions and revenue are not measured.
 
 ## Click tracking
 
