@@ -1,17 +1,15 @@
 ---
-title: 'Repurpose: turn a page into a social carousel'
+title: 'Repurpose: social carousels and animated videos'
 h1: Repurpose
 publishedAt: '2026-07-21 12:00'
 parentPage: extensions
 toc: true
 ---
 
-Turns a page into social posts and carousels (LinkedIn, Instagram, Facebook, Pinterest,
-Threads). A post is a JSON **spec** rendered server-side to **self-contained SVG
-slides** (font and images embedded as `data:` URIs), which rasterise to pixel-exact
-PNGs in any browser. Text is laid out in PHP, so **overflow and bad crops are
-validation errors before anything renders** — which makes specs safe for an AI agent
-to write.
+Turn a page into social posts, carousels and animated videos for LinkedIn,
+Instagram, Facebook, Pinterest and Threads. A JSON **spec** renders to
+self-contained SVG slides with embedded fonts and images. PHP validates text
+overflow and crop bounds before rendering; the browser exports PNGs.
 
 ## Install
 
@@ -84,6 +82,7 @@ ships a `carousel` playbook for exactly this loop.
 bin/console pw:repurpose:schema                 # print the JSON Schema
 bin/console pw:repurpose:validate spec.json     # lint a spec (precise violations, non-zero exit)
 bin/console pw:repurpose:render spec.json out/  # render to out/slide-1.svg …
+bin/console pw:repurpose:motion spec.json video/ # export an editable Remotion project
 bin/console pw:repurpose:fonts                  # list font pairings + installed status
 bin/console pw:repurpose:fonts bebas-neue-lato  # install a pairing's TTFs (or --all)
 ```
@@ -163,6 +162,97 @@ export as an `.mp4` slideshow.
 
 Binaries are auto-detected from `PATH`; override with `repurpose.chromium_binary`
 (preview contact sheet) and `repurpose.ffmpeg_binary` (video).
+
+## Motion design and agent-authored videos
+
+For guided authoring, visual review and delivery, use **`pw motion [brief or page]`** from the
+[`pw` AI skill](https://github.com/Pushword/Pushword/tree/main/packages/ai-skills).
+It supports the exported timeline and custom React scenes.
+
+`pw:repurpose:motion spec.json video/ --host=example.com` exports a standalone
+[Remotion](https://www.remotion.dev/docs) project into a **new** directory. Use
+`instagram` / `story-9-16` for a vertical video, or another valid network/format
+pair for square or landscape output. The command validates the carousel before
+writing and resolves the creator using the selected site.
+
+```bash
+cd video
+npm install
+npm run check
+npm run studio
+npm run still -- --frame=45
+npm run render
+```
+
+Requires Node.js 22+ and npm on the rendering machine. Remotion installs its own
+rendering dependencies, including a headless browser, and has separate
+[license terms](https://www.remotion.dev/docs/license/pricing). No Node dependency
+is added to the CMS. The resulting H.264 video is `out/video.mp4`.
+
+`timeline.json` defines dimensions, fps, scene order, durations and incoming
+crossfades **in frames**; `timeline.schema.json` describes its shape. Crossfades
+overlap scenes and reduce total duration. Each slide exports SVG layers in
+drawing order, preserving the static layout and embedded assets. Layers support
+`none`, `fade`, `rise` and `zoom-in` animations.
+
+For custom animation, edit `src/Scene.jsx` or register a React component by slide
+id in `src/scenes.jsx`. Reuse `SlideLayers` or supply your own artwork and local
+assets. Derive motion from `useCurrentFrame()` so seeking and rendering agree.
+The exported README includes a custom scene example.
+
+`npm run check` reports timeline errors and missing layer assets as JSON. It does
+not detect visual overlaps or validate every asset referenced by custom JSX.
+Inspect stills at mobile size for entrances, text crossings, transitions and the
+final frame, then render and review the MP4. Timeline edits do not update
+`spec.json` or the stored post. Keep the editable project outside `vendor/`;
+exporting into an existing directory is refused. The admin's **Slideshow .mp4**
+button exports fixed images; render custom motion from the exported project.
+
+### Watch the rendered video in the admin
+
+Import the MP4 or WebM into the media library, then select it under **Deck →
+Rendered video** in the studio. The **Slides / Rendered video** toggle switches
+between the live static deck and a native video player with playback, seeking,
+fullscreen and download. A post with an attached video opens on the video view.
+The player shows the last imported render. After editing scenes in Remotion
+Studio, render and import the new video to update it.
+
+Agents can attach the same media through the optional top-level `video` field in
+the carousel JSON, for example `"video": "campaign-reel.mp4"`. It is a media
+filename, not a URL or path. Omit it to detach the video; this does not delete the
+media. The studio reports unavailable or unplayable videos without hiding the
+static deck.
+
+### Packaged example: NORD.
+
+Every installation of `pushword/repurpose` includes a complete five-scene vertical
+reel in `examples/nord/`: custom React scenes, a companion static spec, local demo
+photos and a preparation script. From a Composer site's root:
+
+```sh
+node vendor/pushword/repurpose/examples/nord/prepare.mjs /tmp/nord-motion
+cd /tmp/nord-motion
+npm install
+npm run check
+npm run still -- --frame=205
+npm run render
+```
+
+Use a new output directory; in the monorepo replace `vendor/pushword/repurpose`
+with `packages/repurpose`. Preparation requires Node.js 22+, but no PHP, fixture
+database or running CMS. Read the example's README (copied to `EXAMPLE.md` in
+the generated project) for adapting the scenes, importing the companion deck's
+images and attaching the MP4. Keep editable projects outside `vendor/`.
+
+For API delivery, upload `out/video.mp4` using
+[`POST /api/media/{filename}`](/media-api#multipart-file-upload). Set `video` to
+the response's `filename`, which may differ after renaming or deduplication.
+Validate and PUT the updated spec through the Repurpose API, then open its
+returned `studioUrl`. Saving a draft does not publish to a social network.
+
+The development fixtures reuse this example's spec and include its rendered MP4
+at `packages/dev-app/media~/repurpose-nord.mp4`; normal fixture loading needs no
+Node.js or rendering tools.
 
 ## Networks and formats
 
