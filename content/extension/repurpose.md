@@ -7,9 +7,9 @@ toc: true
 ---
 
 Turn a page into social posts, carousels and animated videos for LinkedIn,
-Instagram, Facebook, Pinterest and Threads. A JSON **spec** renders to
-self-contained SVG slides with embedded fonts and images. PHP validates text
-overflow and crop bounds before rendering; the browser exports PNGs.
+Instagram, Facebook, Pinterest, Threads, YouTube Shorts, TikTok and X. A JSON
+**spec** renders to self-contained SVG slides with embedded fonts and images. PHP
+validates text overflow and crop bounds before rendering; the browser exports PNGs.
 
 ## Install
 
@@ -19,9 +19,8 @@ composer require pushword/repurpose
 
 Requires `ext-gd` (text measurement) and `ext-zip` (export); no Imagick.
 
-Installed before seeding a fresh site, the demo fixtures add a ten-slide carousel of
-the `examples` page, one feature per slide. Its spec, `src/DataFixtures/Carousel.json`,
-is the reference to copy from; the post sits under **Social posts**.
+Demo fixtures add sample posts under **Social posts**. For a portable starting
+spec, use the package's `examples/nord/spec.json`, described below.
 
 ## How it fits together
 
@@ -49,7 +48,7 @@ Page ──► CarouselDrafter ──► SocialPost ◄──► social-post/{pa
   100%) and exporting it. Click a text to edit it in place; drag any text on the
   slide (a stack field becomes a free text box where it lands).
 
-## Author with an agent (recommended)
+## Author with an agent
 
 There is no LLM inside the package. An agent writes the spec against a published
 schema and validates it — free, with whatever model you already use.
@@ -75,6 +74,25 @@ schema and validates it — free, with whatever model you already use.
 
 The [`pw` ai-skill](https://github.com/Pushword/Pushword/tree/main/packages/ai-skills)
 ships a `carousel` playbook for exactly this loop.
+
+## YouTube Shorts, TikTok and X
+
+Choose **YouTube Shorts** (`youtube`) or **TikTok** (`tiktok`) in the studio's
+network selector to create a separate vertical version. Both use `story-9-16`
+(1080 × 1920) and advertise `video` as their export kind in the networks API.
+Use **Slideshow .mp4** to render the slides, or attach an existing MP4/WebM from
+the media library. Switching networks preserves the attached video; changing the
+slide format does not resize or regenerate that file. Upload the finished video
+through the platform's own publishing interface and check its duration and caption
+limits there ([YouTube Shorts upload rules](https://support.google.com/youtube/answer/12779649),
+[TikTok publishing reference](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post)).
+
+**X** (`x`) offers `x-16-9` (1600 × 900) and `x-1-1` (1080 × 1080) image exports.
+A post accepts up to four images; drafts keep a cover, up to two body slides and
+a closing slide. Switching an existing carousel to X keeps its first four slides.
+Caption length needs review in X's composer because its
+[weighted character count](https://docs.x.com/fundamentals/counting-characters)
+handles URLs and emoji differently; Repurpose does not validate that count.
 
 ## Command line
 
@@ -256,7 +274,9 @@ Node.js or rendering tools.
 
 ## Networks and formats
 
-Formats are data with a provenance note; the validator enforces only **hard limits** (LinkedIn ≤300 pages / ≤100 MB / all pages
-one size; Instagram ≤20 slides; Pinterest = one organic image Pin with a caption),
-never engagement opinions. Caption limits include the hashtags appended at export.
-Fetch the live table from `GET /api/repurpose/networks`.
+Validation checks allowed formats, slide counts and captions. Caps include
+LinkedIn's 300 pages, Instagram's 20 slides, Pinterest's single captioned image,
+and X's four images. Caption limits include hashtags appended at export.
+Publishing guidance does not block validation; file-size limits in the registry
+are reference data, so check the export before uploading. Fetch limits, formats
+and guidance from `GET /api/repurpose/networks`.

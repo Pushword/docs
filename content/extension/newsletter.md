@@ -167,6 +167,34 @@ keeps one brand's link from revealing what another brand knows. An RFC 8058
 All public links (confirm, unsubscribe) are built from the audience host's
 `base_live_url`, so they work when the site is statically generated.
 
+### Importing prospects
+
+Create contacts without opting them in by posting `status: "prospect"` to
+`POST /api/newsletter/contact`:
+
+```json
+{
+  "audience": "news",
+  "email": "prospect@example.tld",
+  "name": "Robin",
+  "status": "prospect",
+  "source": "import:prospects",
+  "tags": ["Trade show"]
+}
+```
+
+No confirmation or other mail is sent, even when the audience requires double
+opt-in. The contact has no confirmation date or opt-in event and is excluded
+from campaigns, segments and automations. Phone-only prospects work the same way.
+Filter them with `GET /api/newsletter/contact?audience=news&status=prospect`.
+
+Repeating the import updates identity, tags and custom properties without
+changing an existing subscription, opt-out, bounce, pending confirmation or its
+consent evidence. A separate audience is unnecessary. To opt a prospect in later,
+use the public subscription form, the admin opt-in action, or post the contact
+again without `status` to follow the audience's double opt-in rule. Use
+`status: "subscribed"` only when consent has already been collected.
+
 ### The consent ledger
 
 A contact's dates describe the current state: `confirmedAt` keeps the first
@@ -437,6 +465,13 @@ failure.
 touching no contact and no counter. Once the campaign carries translations, it
 asks which language to send.
 
+### Reviewing a campaign
+
+Open **Review** from the campaign catalogue to see the rendered email, audience,
+schedule and delivery results. The preview starts at desktop width. **Markdown
+source** and advanced settings stay collapsed; use **Edit** to change a draft,
+or the send and schedule actions to prepare delivery. Previewing sends no mail.
+
 ### Email design and live preview
 
 In **Newsletter → Templates**, choose **Create template**. Give it a name, edit
@@ -474,25 +509,38 @@ and Twig presets supply their own. From a campaign, the shared-design link opens
 the selected saved template or the audience settings in another tab. Changes
 affect every campaign and automation that uses those settings.
 
+**Personal email** sends transactional service messages as content and an optional
+audience **Signature**, in HTML and plain text. The signature accepts Markdown,
+`%siteName%` and `%year%`. This layout omits newsletter branding, preview text,
+postal address and unsubscribe links and headers, without requiring the
+transactional checkbox. Choose it for an audience (including automations) or one
+campaign. Recipient eligibility, sender, Reply-To and link tracking still apply.
+Switching back restores the audience's newsletter header and footer.
+
+The audience design keeps the three built-in layouts visible; expand **Other
+templates** for saved and site templates. **Personal email signature** opens
+automatically in personal mode and can also be edited independently of the
+audience's default layout. A campaign's **Customize the signature** link opens
+that section without changing the shared layout.
+
 New audiences start with `**%siteName%**` as the header and
 `© %year% %siteName%` as the footer. These values resolve against the sender's
 site and the current year in both HTML and plain text. Existing saved designs
 are preserved. **Restore site name and copyright** applies these defaults to
 the editable fields; clearing either field deliberately removes that part.
 
-All design and campaign previews use the sending renderer and update while
-typing. **Mobile 375** is selected by default; **Desktop 600** is also available.
-Previewing never saves, creates contacts or sends mail. In the audience design
-editor, narrow screens have a **Design settings / Live preview** switch and a
-horizontally scrollable preview
-at its rendering width. Sample content changes only the preview; **Save email
-design** applies the design settings. Unsaved design edits are indicated
-separately from preview freshness, and leaving the page warns before discarding
-them. A failed preview keeps the last rendering and offers **Try again**. Email
-clients may render the same HTML differently.
+Design and campaign composition previews use the sending renderer and update
+while typing. **Mobile 375** is selected by default; **Desktop 600** is also
+available. Previewing never saves, creates contacts or sends mail. In the
+audience design editor, narrow screens have a **Design settings / Live preview**
+switch and a horizontally scrollable preview at its rendering width. Sample content changes
+only the preview; **Save email design** applies the design settings. Unsaved
+design edits are indicated separately from preview freshness, and leaving the
+page warns before discarding them. A failed preview keeps the last rendering and
+offers **Try again**. Email clients may render the same HTML differently.
 
-The unsubscribe link and postal address remain automatic. An occurrence's
-`SendContext.footerMarkdown` overrides the audience footer, including an empty
+For the other layouts, the unsubscribe link and postal address remain automatic.
+An occurrence's `SendContext.footerMarkdown` overrides the audience footer, including an empty
 override. A null footer inherits the selected design; `SendContext::fromAudience`
 uses that value for saved templates.
 Sites overriding `/newsletter/email.html.twig` receive `wrapped` and `header`
@@ -515,7 +563,7 @@ newsletter:
       template: 'newsletter/letter.html.twig'
 ```
 
-Both entries appear alongside the two built-in layouts in **Email design** and
+Both entries appear alongside the three built-in layouts in **Email design** and
 **Design for this campaign**. **Newsletter → Templates** also lists these site
 designs with a read-only preview. Each entry needs its own ID and label; adding a
 file to `templates/newsletter/` alone does not add a choice. Clear the Symfony
