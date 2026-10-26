@@ -1097,11 +1097,12 @@ set; the date is stamped when the campaign is armed (scheduled in March, sent in
 April: dated April). Rewording the subject afterwards renames nothing.
 
 Every campaign also carries a permanent `utm_id`. Automations use their own permanent
-`utm_id` across all occurrences, plus the step's permanent identity in `utm_term`.
-`utm_campaign` and `utm_content=step-2` remain editorial labels: renaming an automation
-or reordering a step does not change its permanent identifiers. Existing persisted
-entities derive their first identity from their entity kind and database ID; entities
-used before persistence receive a UUID. The identity is then stored unchanged.
+`utm_id` across all occurrences. `utm_campaign` and `utm_content=step-2` remain
+editorial labels: renaming an automation or reordering a step does not change its
+`utm_id`. `utm_term` is left unset, since analytics tools report it as the paid-search
+keyword. Existing persisted entities derive their first identity from their entity
+kind and database ID; entities used before persistence receive a UUID. The identity
+is then stored unchanged.
 
 It never touches a link to another domain, a link you tagged by hand, or the
 unsubscribe link, and tags nothing while the audience has no source.
@@ -1114,8 +1115,10 @@ the next section.
 
 ## Multi-source campaign index
 
-**Newsletter → Campaigns** opens a read-only catalogue at
-`/admin/newsletter/campaigns`. Filter by source, status or subject/audience text.
+As soon as an application listens to `CollectCampaignIndex` (below), **Newsletter →
+Campaigns** opens a read-only catalogue at `/admin/newsletter/campaigns`; until then it
+opens the campaign list. An overridden admin template gets the same route from
+`newsletter_campaigns_route()`. Filter by source, status or subject/audience text.
 Scheduled and sent dates use the editorial timezone; missing values stay unknown.
 Use **Create in Pushword** or **Manage in Pushword** for the native campaign editor,
 bulk actions and delivery controls. Existing CRUD routes remain available.
@@ -1165,9 +1168,10 @@ remote campaign total. An empty search offers a filter reset; an empty catalogue
 offers the connected tools' creation links.
 
 `CampaignIndexItem` also accepts nullable `scheduledAt`/`sentAt` (`DateTimeImmutable`)
-and `audience`. Unknown status or dates are `null`; external statuses such as
-`paused` and `archived` do not change Pushword's delivery state machine. Listeners
-may enrich native navigation through `$index->items['pushword:42']->actions`.
+and `audience`. Unknown status or dates are `null`. Pushword translates its own
+statuses (`draft`, `scheduled`, `sending`, `sent`); any other status displays as given,
+so pass the label your editors should read. External statuses such as `paused` do not
+change Pushword's delivery state machine. Listeners may enrich native navigation through `$index->items['pushword:42']->actions`.
 Action labels map to HTTP(S) URLs or root-relative paths, validated after listeners.
 Use links to the owning tool and existing reports: this catalogue imports no
 content, computes no cross-provider statistics and delegates no sending.
@@ -1175,7 +1179,7 @@ Statistics providers use the separate contract below; a catalogue entry alone do
 
 ## Statistics
 
-Open **Newsletter → Statistics**. Filter by audience, dates, observation window and
+Open **Newsletter → Statistics**. Filter by audience, dates, observation window, click placement and
 report grouping: campaigns (including automation summaries), automation, step, or
 step and send occurrence. Native and external reports share this interface and keep
 both their source identifier and their link to the owning management tool. Detailed
@@ -1202,8 +1206,10 @@ A campaign spanning several days therefore has a separate window for each messag
 | Raw clicks | All recorded clicks, including scanners and unclassified requests. Campaign lifetime counters survive consent withdrawal; windowed results use retained events. |
 | Unique contacts | Distinct contacts within each report. Totals sum contact/report pairs; a person appearing in two reports counts twice, not as one globally deduplicated person. |
 | Qualified clicks | Clicks classified by an extension as non-automated. Unclassified requests are excluded from this count, not declared human. The classified-click count and method show the extent of qualification. |
-| Tracking coverage | Accepted messages with tracking authorized at send time / all accepted messages. Known consent snapshots are also counted; historical gaps remain not measured. |
+| Tracking coverage | Accepted messages instrumented for the selected placement with tracking authorized at send time / all accepted messages. Known consent snapshots are also counted; historical gaps remain not measured. |
 | Click rate | Unique raw clicking contacts / the source's declared base. Pushword defaults to accepted messages with tracking authorized; an external source may use confirmed deliveries. Qualified click rate has its own declared base. |
+| Click rate / confirmed delivery | Unique raw clicking contacts / confirmed deliveries. This is additional to the source's original click rate; it does not make different tracking populations equivalent. |
+| Identified automated / unknown clicks | Known bot signatures and unknown automation status are separate counts. Clicks excluding identified bots include unknown requests and are not a count of proven humans. |
 | Bounce / unsubscribe rate | Historical bounces / opt-outs divided by accepted messages. Re-subscribing changes current state, never erases a past opt-out. |
 
 `Metric(0)` means a measured zero; `Metric::notMeasured()` means the observation was
@@ -1215,7 +1221,7 @@ Historical opt-outs already subtracted before this upgrade cannot be reconstruct
 
 **Audience health today** remains a current subscription snapshot. **Subscription
 activity** counts consent events during the selected dates, independently of send
-cohorts. Opens, spam complaints, conversions and revenue are not measured.
+cohorts. Opens, conversions and revenue are not measured. External providers may supply spam complaints; the native provider leaves them unavailable without a collection source.
 
 ### Add a statistics source
 
@@ -1272,12 +1278,78 @@ List and detail show this metadata; CSV appends `observedAt`, `notice`, `noticeL
 and rate metric names after existing columns. Totals do not invent a shared snapshot
 date or merge source notices; each row retains its source metadata.
 
+### Prove native delivery coverage
+
+Native receiving-server notifications are confirmed facts, not proof that every
+callback was collected. A measured `Metric(value, state, complete: false)` retains
+its observed lower bound; the UI marks it with ≥ and CSV appends `<metric>Complete`.
+Rates require complete numerators and denominators. Incomplete native delivery
+coverage leaves `deliveryRate` and rates based on delivered messages unavailable.
+
+A site collector may listen to `Event\QualifyDeliveryCoverage(messages, query)`.
+Its readonly inputs contain the native message cohort and full `ReportQuery`;
+mutable `complete` defaults to false, with optional `observedAt`, `notice` and
+`noticeLevel` (`warning` by default). This event is dispatched **before** delivery
+events are loaded. Set `complete = true` only after proving the collection start,
+watermark and gap/ACK state cover every selected attempt and observation window.
+Publish the durable collection boundary as `observedAt`; native delivery events
+are bounded by that timestamp, while click observations keep the query's own bound.
+A positive confirmation
+alone is never such proof. Campaigns missing send-ledger references cannot become
+complete through this hook. With verified complete coverage, a true zero remains
+measured zero. Existing providers and two-argument `Metric` calls remain compatible.
+
+### Reuse the message observation aggregator
+
+`Statistics\ObservationAggregator` shares the native counting and window rules without
+requiring native `Campaign`, `Contact` or Doctrine entities. Providers select the report
+cohort and pass `ObservedMessage(reference, recipientKey, attemptedAt, acceptedAt,
+trackingAllowed, transportFailed, events, trackingScopes)` DTOs. References, recipient
+keys and send dates may be null; never invent them from a campaign name or collection
+time. `recipientKey` may be an opaque source-scoped key rather than an email address.
+
+Events are `ObservedEvent(kind, occurredAt, automated, qualificationMethod, scope,
+linkId, url)`. Kinds: `delivered`, `deferred`, `bounced`, `click`, `unsubscribed`,
+`complaint`. Scope defaults to `unknown` for external observations. System-link clicks
+are excluded. Known attempt references must occur once in the selected cohort.
+
+Call `metrics($messages, $query, new ObservationCoverage($completeMetrics))`.
+The coverage map is per measurement and per query; absent keys mean unavailable.
+A verified observed zero remains zero. For example, a callback source can prove
+`clickers => true` while leaving `clicks => false` when exact replay detection is
+impossible. The aggregator does not deduplicate similar click events: two identical
+clicks in one second can be genuine separate clicks. Adapters authenticate callbacks,
+handle retries and establish completeness before enabling each metric.
+
+Relative windows need actual source send dates. Real dated legacy events may remain
+measurable for lifetime reports without fabricating a send date; send volumes and
+relative windows remain unavailable. Unknown recipient identities invalidate unique
+counts. Conflicting latest delivery outcomes with equal timestamps stay unavailable,
+not ordered by callback arrival. Providers must also detect collection gaps; no
+aggregator can recover missing past callbacks.
+
+`ReportQuery` appends optional `clickScope` (`body`, `navigation`, `footer`, `unknown`,
+or null for all). It filters clicks while send and delivery volumes retain their
+cohort. Unknown placement cannot become zero body/footer clicks. Native tracking
+coverage uses each message's send-time `trackingScopes` and consent snapshot; an old
+body-only send was not instrumented for footer clicks.
+
+`links($messages, $query, $coverage)` returns `LinkReport(url, linkId, scope, clicks,
+clickers)` with independent `Metric` states. Pass it as optional `Report::links`; native
+and external detail pages render the same table. Groups retain `(scope, linkId, url)`,
+so an edited destination does not rewrite past CTA results. Only HTTP(S) destinations
+become navigable; other values remain escaped text. The 1.0.81 CSV prefix is retained;
+new metrics, rates and the placement selection are appended after its columns.
+
 ### Delivery events and precise attribution
 
 Each campaign or drip attempt persists a `DeliveryMessage` before sending: permanent
 reference, signed RFC Message-ID, transport-returned ID, attempt and acceptance dates,
 transport failure, consent snapshot, campaign or automation, stable step and occurrence.
-The signed click payload and unsubscribe URL carry this reference. SMTP Message-ID
+The signed click payload and unsubscribe URL carry this reference. Only messages with
+this ledger entry also carry `X-Pushword-Newsletter-Message: <reference>`; DOI and
+unrecorded test emails do not. Transport adapters may use it to correlate a queue ID
+without treating every signed legacy Message-ID as a recorded campaign send. SMTP Message-ID
 is retained separately because a provider may replace the transport-returned ID.
 
 Authenticate a provider webhook in your adapter, resolve its ID to the stored
@@ -1301,11 +1373,19 @@ message relation; re-subscription leaves those events and campaign counters inta
 
 Listen to `Click\QualifyClick`, dispatched only after consent checks. Inspect its
 `request` and signed `payload`, then set `automated` (`true` scanner, `false`
-non-automated, `null` unknown) and a versioned `method` string. No classifier ships by
-default. Every recorded event retains that decision and method; raw and qualified
+non-automated, `null` unknown) and a versioned `method` string.
+The optional built-in `newsletter.bot_click_qualification: true` classifier flags
+known automated user agents and records `known-user-agent/v1`. It is disabled by
+default and never calls ordinary browsers human. A site's explicit classification
+is preserved. Existing `filteredClicks` / `filteredClickers` still count only
+`automated === false`. New `clicksWithoutKnownBots` / `clickersWithoutKnownBots` count
+requests not identified as automated, including unknown ones, only when a qualification
+method was actually applied. `automatedClicks` and `unclassifiedClicks` keep those
+populations visible. Every recorded event retains that decision and method; raw and qualified
 counts are exposed separately. Unclassified events are never silently treated as human.
 Withdrawal still stops recording and purges personal click records; qualification does
-not bypass either consent gate or track unsubscribe, navigation or footer links.
+not bypass either consent gate or track system/unsubscribe links. Navigation/footer
+links additionally require the explicit scope configuration below.
 
 ## Click tracking
 
@@ -1340,9 +1420,19 @@ click (contact, campaign or step, destination, time) and answers `302` to the
 destination. With either gate closed, links stay exactly as written, `utm_*`
 included.
 
-- **Only the body's `http(s)` links** are rewritten. The body is rewritten before
-  the template wraps it, so template links — the unsubscribe link first — are out
-  of reach.
+- **Body-only by default.** `newsletter.click_tracking_scopes: [body]` preserves
+  the original scope. Add `navigation` and/or `footer` explicitly to instrument
+  those roles on future sends. The message retains that scope snapshot; changing
+  configuration does not relabel earlier sends.
+- Custom HTML templates mark anchors with `data-newsletter-scope="body|navigation|footer|system"`
+  and optional `data-newsletter-link-id="trip-main"`. Built-in Markdown headers and
+  footers receive their known role automatically. Unmarked custom-template links
+  stay excluded; `system`, unsubscribe/confirmation URLs and explicit exclusions
+  are never rewritten or UTM-tagged.
+- Newly tracked links without an explicit CTA ID receive a deterministic ID based
+  on scope, destination and that destination's occurrence in the rendered segment.
+  Identical URLs in two buttons remain distinguishable. Explicit IDs take priority;
+  old signed payloads retain body scope and a null CTA ID, never a backfilled identity.
 - **UTM tagging runs first**, so the recorded and redirected URL is the tagged one.
 - The plain-text part keeps its links as written.
 
