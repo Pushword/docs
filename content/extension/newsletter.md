@@ -449,12 +449,23 @@ saved rows; the API returns `estimatedRecipients` on any draft campaign.
 
 Write the body in Markdown (the block editor takes over when
 `pushword/admin-block-editor` is installed), pick an audience and optionally a
-segment, then **Send** or **Schedule**. `%name%` and `%email%` are substituted in
+segment, then **Send**. A future date schedules delivery; an empty or past date
+starts it immediately. `%name%` and `%email%` are substituted in
 the subject and the body. The **analytics name** is the campaign's slug, derived
 from the subject when empty; the send date is prefixed to it when the campaign
 goes out.
 
-Sending never blocks: recipients are frozen into rows up front and the tick
+Use `%firstName%` for an explicit first name, stored as a string in the contact's
+`customProperties.firstName`. Pushword never guesses it from `name`. A missing,
+blank or non-string value becomes empty; `%firstName|there%` lets the author supply
+a natural fallback in the message's language, for example `Hello %firstName|there%!`.
+This works in the subject, preheader and body, including translations and automation
+messages. The first name and its fallback are inserted as text, not Markdown or HTML;
+use this variable in prose, not link destinations. `%name%` and `%email%` retain their
+existing behavior. Live previews use Alex; test sends use Test. Map source data into
+the property through the existing contact API; no schema update is needed.
+
+Sending never blocks: recipients are frozen into rows when delivery starts and the tick
 drains them at the audience's cadence. A row already sent is never re-sent, so an
 interrupted run, a deploy or a crash cannot double-send. A contact who
 unsubscribed between arming and sending is recorded as `skipped`, not as a
@@ -464,12 +475,55 @@ failure.
 touching no contact and no counter. Once the campaign carries translations, it
 asks which language to send.
 
+### Editorial planning and calendar
+
+**Calendar** offers month, week, year and agenda views alongside the existing list.
+Both share site, audience, source, delivery status, preparation stage and search
+filters. Undated newsletters remain visible below the calendar.
+
+Save an idea with a **working title**, optional audience, date and internal notes.
+The subject serves as its title when no working title is given. Working titles and
+notes never enter the email, preview or tracking identity. Preparation labels
+**Draft**, **To review**, **Ready** organize work independently of delivery status;
+Ready never authorizes sending. Duplicates copy the title and notes but reset
+preparation to Draft.
+
+`scheduledAt` is the single planned/send date. Saving it on a draft never makes the
+campaign eligible for `pw:newsletter:tick`, even when the date is past. **Send** in
+admin, API or CLI authorizes delivery at that date if future, or immediately otherwise.
+The existing schedule endpoint also authorizes delivery. Sending requires an audience,
+subject, body and successful [preflight](#campaign-preflight); previews remain usable
+while preparing content. Automations do not require an editorial stage. Cancelling
+a scheduled send returns it to Draft and retains its date as a plan. `sentAt` records
+actual delivery.
+
+Drag a native authored draft to change its date, or open its edit form for keyboard
+entry. The editorial timezone controls the display; a month-cell drop retains the
+original wall-clock time across daylight-saving changes. CSRF, editor permissions and
+an optimistic version check protect calendar writes; stale moves fail with a reload
+message. Scheduled campaigns must first be cancelled before changing their date.
+Sending/sent campaigns and generated broadcasts cannot be moved. External items retain
+their `source:id` identity and owning links and are always read-only.
+
+The campaign API accepts `workingTitle`, `internalNotes`, `editorialStage`
+(`draft|review|ready`) and nullable `scheduledAt` on creation and draft PATCH requests.
+An audience may be omitted for an idea and assigned later. These values are returned
+by the editor-only API; internal notes are not added to catalogue/calendar metadata.
+
 ### Reviewing a campaign
 
 Open **Review** from the campaign catalogue to see the rendered email, audience,
 schedule and delivery results. The preview starts at desktop width. **Markdown
 source** and advanced settings stay collapsed; use **Edit** to change a draft,
-or the send and schedule actions to prepare delivery. Previewing sends no mail.
+or **Send** to authorize delivery. Previewing sends no mail.
+
+**More actions → Duplicate as draft** opens an unsaved copy of any campaign, including
+one already sent. Save it to create a new campaign. Content, translations, audience,
+segment, design, working title, internal notes, transactional setting and cadence are
+copied; schedules, automation provenance, recipients, counters and tracking identity
+are reset. The analytics name is derived anew from the subject. Audience and template settings remain
+shared. The API equivalent, `POST /api/newsletter/campaign/{id}/duplicate`, immediately
+creates the draft and returns it with status 201; it requires an editor.
 
 ### Email design and live preview
 
@@ -493,7 +547,7 @@ campaign's choice applies to real and test sends without changing the audience
 or its automations.
 
 Campaign creation and editing show a live email preview beside the form. It
-uses the unsaved audience, design, subject, preview text, body and transactional
+uses the unsaved audience, design, sender profile, subject, preview text, body and transactional
 setting, with Alex as the sample recipient. Selecting an audience starts the
 preview. Narrow screens have a **Write newsletter / Live preview** switch that
 preserves the form's edits.
@@ -508,13 +562,13 @@ and Twig presets supply their own. From a campaign, the shared-design link opens
 the selected saved template or the audience settings in another tab. Changes
 affect every campaign and automation that uses those settings.
 
-**Personal email** sends transactional service messages as content and an optional
-audience **Signature**, in HTML and plain text. The signature accepts Markdown,
-`%siteName%` and `%year%`. This layout omits newsletter branding, preview text,
-postal address and unsubscribe links and headers, without requiring the
-transactional checkbox. Choose it for an audience (including automations) or one
-campaign. Recipient eligibility, sender, Reply-To and link tracking still apply.
-Switching back restores the audience's newsletter header and footer.
+**Personal email** displays content and an optional audience **Signature**, in
+HTML and plain text. The signature accepts Markdown, `%siteName%` and `%year%`.
+This layout omits newsletter branding and preview text. Marketing mail retains
+its unsubscribe links, headers and postal address. Only the explicit transactional
+flag removes unsubscribe features. Choose the layout for an audience (including
+automations) or one campaign. Switching back restores the audience's newsletter
+header and footer.
 
 The audience design keeps the three built-in layouts visible; expand **Other
 templates** for saved and site templates. **Personal email signature** opens
@@ -1118,11 +1172,22 @@ the next section.
 
 ## Multi-source campaign index
 
-As soon as an application listens to `CollectCampaignIndex` (below), **Newsletter →
-Campaigns** opens a read-only catalogue at `/admin/newsletter/campaigns`; until then it
+When an application listens to `CollectCampaignIndex` (below) or configures a default
+site filter, **Newsletter → Campaigns** opens a read-only catalogue at
+`/admin/newsletter/campaigns`; otherwise it
 opens the campaign list. An overridden admin template gets the same route from
 `newsletter_campaigns_route()`. Filter by status or subject/audience text; the
 source filter and column appear only when an external source is listed.
+The native list also offers **Browse by site**, so the catalogue is available without
+an external provider. The **Site** filter uses structured `hosts` metadata, never the
+audience's display label. Native campaigns use their audience's `mainHost`; external
+items may list several hosts. An item matching one host retains all its hosts and its
+original report links: filtering does not narrow the population of its statistics.
+Missing metadata is explicitly **Unknown site** (`?host=@unknown`).
+
+Set `newsletter.catalogue_default_host: example.org` to open the catalogue with that
+site selected. Without configuration all sites are shown. The selection travels in
+`?host=example.org`; **Reset** uses `?host=` to clear even the configured default.
 Scheduled and sent dates use the editorial timezone; missing values stay unknown.
 Use **Create in Pushword** or **Manage in Pushword** for the native campaign editor,
 bulk actions and delivery controls. Existing CRUD routes remain available.
@@ -1151,6 +1216,7 @@ final class ExternalCampaignIndexListener
             subject: 'Autumn news',
             status: 'draft',
             actions: ['Open in source' => 'https://example.org/campaign/42'],
+            hosts: ['example.org', 'example.fr'],
         ));
         $index->creationActions['Create in source'] = 'https://example.org/campaign/new';
         $index->notices['external'] = 'Campaign cache last synchronized yesterday.';
@@ -1172,7 +1238,8 @@ remote campaign total. An empty search offers a filter reset; an empty catalogue
 offers the connected tools' creation links.
 
 `CampaignIndexItem` also accepts nullable `scheduledAt`/`sentAt` (`DateTimeImmutable`)
-and `audience`. Unknown status or dates are `null`. Pushword translates its own
+and `audience`, plus a list of site identities in `hosts` (empty means unknown).
+Unknown status or dates are `null`. Pushword translates its own
 statuses (`draft`, `scheduled`, `sending`, `sent`); any other status displays as given,
 so pass the label your editors should read. External statuses such as `paused` do not
 change Pushword's delivery state machine. Listeners may enrich native navigation through `$index->items['pushword:42']->actions`.
@@ -1473,6 +1540,97 @@ lives in `customProperties` and is readable from a segment as `prop.<key>`. Writ
 them from the API: a `PATCH` merges rather than replaces, and a `null` value
 removes a key.
 
+## Campaign preflight
+
+The campaign review page shows blocking errors and suggestions. The same
+`CampaignPreflight` runs for admin, API and CLI sends, scheduling, and again when
+the tick arms a due campaign. It checks audience, subject and body in every
+authored language, rendered link destinations, the marketing unsubscribe link,
+sender availability and referenced blocks. Block checks receive the requested send
+date. Long subjects are suggestions. URL checks validate syntax without requesting
+remote pages. A blocked send returns the campaign to draft, preserves its planned
+date and records `sendIssues`. Correct it and choose Send again. Other due campaigns
+continue; the tick report includes `blocked`.
+
+`GET /api/newsletter/campaign/{id}/check` returns `issues` without sending. Send
+and schedule return HTTP 422 with the same issue structure when blocked. CLI
+send exits unsuccessfully with structured issues in agent mode. Each issue has
+`code`, `message` (translation key or plain text), `field`, `severity` (`error` or
+`warning`), and nullable `locale` and `block` labels. Warnings do not block sending.
+
+Subscribe to `Pushword\Newsletter\Event\CheckCampaign` to add business checks.
+The event exposes the campaign, effective contents per locale and untracked HTML;
+append `CampaignIssue` objects to `issues`. Checks must be read-only and must not
+send mail. An exception blocks sending. Once authorized, delivery fields are
+read-only in the admin; cancel a schedule before editing it.
+
+## Campaign sender profiles
+
+Configure the identities editors may select. Leaving `senderProfile` null uses
+the audience sender. A selected profile supplies From, Reply-To and an optional
+signature consistently in live preview, tests and delivery. It does not change
+the audience, eligibility, tracking consent, system links or unsubscribe rules.
+
+```yaml
+newsletter:
+  sender_profiles:
+    editorial:
+      label: Editorial team
+      from_email: news@example.org
+      from_name: Example editorial team
+      reply_to: editor@example.org
+      signature_markdown: '**The editorial team**'
+```
+
+`reply_to` defaults to the audience Reply-To. A null/omitted signature keeps
+the audience signature in personal layouts; other layouts add no signature by
+default. An explicit empty signature removes it. The API accepts the configured
+id in `senderProfile`, never arbitrary From fields. Removing a selected profile
+blocks a draft or scheduled campaign until another identity is selected.
+
+## Reusable email blocks
+
+**Newsletter → Reusable blocks** stores named groups of text, images, links,
+quotes and signatures. Button and Button outline links use inline email styles.
+In the campaign block editor, insert **Reusable block**, select a source and search.
+Edit the inserted Markdown copy and check the live email preview.
+**Save a copy to the library** creates a separate
+library entry. **Refresh from source** explicitly replaces that copy after
+confirmation. Editing or deleting a library entry never changes existing copies.
+Duplication retains the references, parameters, order and manual edits.
+
+The campaign stores a fenced `newsletter-block` JSON object with `provider`,
+`reference`, `label`, `parameters` and the authored `markdown`. `BlockMarkup::encode`
+creates it in PHP; `blocks` reads references and `expand` yields the saved content.
+HTML and plain text expand the same copy before personalization. No Twig is
+executed and no provider is silently refreshed while rendering or sending. The
+saved campaign therefore retains what was selected and edited. Nested or malformed
+blocks block sending.
+
+### Add a content provider
+
+Implement `Pushword\Newsletter\Block\BlockProviderInterface` in an autoconfigured
+service; its `pushword.newsletter.block_provider` tag is automatic. The methods are:
+
+- `type()` gives a unique stable storage key; `label()` gives its display name or translation key.
+- `search($query, BlockContext $context)` returns at most 25 `BlockContent` matches.
+- `resolve($reference, $parameters, $context)` returns the current content or null when unavailable; used only for explicit refresh.
+- `check(BlockContent $saved, $context)` returns `CampaignIssue` diagnostics for the saved selection. Check existence, eligibility and required parameters here; do not overwrite `$saved->markdown`.
+
+`BlockContext` carries the audience host, locale and planned send date.
+`BlockContent` carries the stable reference, label, email Markdown and parameters.
+Return email-safe Markdown, with simple text, images and links, instead of web
+components requiring scripts, widgets or arbitrary Twig. Apply site and locale
+visibility in search, resolve and check. Treat parameters as untrusted input.
+
+For example, a site's catalogue provider can resolve a product's stable id in
+`check()` and return `new CampaignIssue('product.unavailable', 'This product is no
+longer available.', 'bodyMarkdown')` when it is missing or unavailable at
+`$context->scheduledAt`. The issue is shown beside that block and language. The
+`library` provider deliberately permits deleted originals because its copies are
+independent. Travel selection rules and catalogue queries belong in site providers,
+not in the newsletter bundle.
+
 ## Sending
 
 `pw:newsletter:tick` is stateless and idempotent. Each run, under a lock:
@@ -1500,7 +1658,7 @@ from becoming a burst.
 
 ```shell
 php bin/console pw:newsletter:tick
-php bin/console pw:newsletter:send 12    # arm a campaign now; the tick delivers
+php bin/console pw:newsletter:send 12    # authorize delivery at its planned date, or now
 ```
 
 The transport is the site's own `MAILER_DSN`: each site owns its provider and its
@@ -1653,9 +1811,11 @@ POST   /api/newsletter/contact/{id}/bounce
 
 GET    /api/newsletter/campaign?audience=&status=
 POST   /api/newsletter/campaign
+GET    /api/newsletter/campaign/{id}/check  # structured preflight issues
 GET    /api/newsletter/campaign/{id}    # includes estimatedRecipients while draft, clicksByUrl once sent
 PATCH  /api/newsletter/campaign/{id}    # drafts only
 DELETE /api/newsletter/campaign/{id}
+POST   /api/newsletter/campaign/{id}/duplicate  # creates a draft copy
 POST   /api/newsletter/campaign/{id}/schedule
 POST   /api/newsletter/campaign/{id}/send
 POST   /api/newsletter/campaign/{id}/test
