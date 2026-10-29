@@ -48,6 +48,24 @@ last two buttons open the editor fullscreen and the [markdown cheatsheet](/edito
 The same editor, toolbar included, backs the markdown mode of
 [admin-block-editor](/extension/admin-block-editor).
 
+### Diagnosing slow edit-lock pings
+
+The editor posts to `/admin/page/{pageId}/lock/ping` every three seconds. Edit locks
+live in `var/page-locks/`, separately from PHP session locks. A ping can wait for its
+session during authentication even when its SQL query is fast. Core releases the
+session before the controller runs; later session access can acquire the lock again.
+
+For native file sessions, diagnose contention on a local server with at least two
+PHP workers:
+
+1. Record a ping's elapsed time, SQL count and SQL time in the Symfony profiler.
+2. Hold that session file's lock for two seconds in another process, then repeat
+   the ping alongside a request from a second authenticated session.
+3. A firewall wait affecting only the held session indicates session contention.
+   If both sessions wait, check worker capacity and shared resources.
+4. Repeat alongside the actual slow admin request to find where it retains or
+   reopens the session before changing session handling.
+
 ### Parent page
 
 In the settings panel, search by page title, slug, path or a URL on a configured
