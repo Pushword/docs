@@ -104,6 +104,24 @@ it leaves out, with its date in the
 agent JSON carries them under `scheduled`. A [scheduled command](/background-tasks#scheduled-commands)
 on `publish` regenerates them once the date passes.
 
+### Full rebuilds
+
+Full builds render every page into a temporary directory before the atomic swap.
+When the bytes match the previous export, existing non-empty gzip, Brotli and
+Zstandard files are reused. Changed pages and missing compressed files are
+compressed normally, in both sequential and parallel builds.
+
+HTML minification is cached by the rendered HTML and minifier identity, including
+the native binary's contents when enabled. Content, template or minifier changes
+invalidate the result. Minified documents share the persistent
+`cache.pushword_markdown` pool and its 30-day lifetime with Markdown fragments.
+`cache:clear` preserves them; `cache:pool:clear cache.pushword_markdown` removes both.
+
+The optional Rust minifier matches the installed PHP/libxml serializer, including
+`<noscript>`, SVG/MathML and Alpine `@event` attributes. Control-character edge cases
+fall back to PHP. For build and configuration instructions, see the package's
+[`rust/README.md`](https://github.com/Pushword/Pushword/blob/main/packages/static-generator/rust/README.md#build-and-enable).
+
 ### Incremental generation
 
 `--incremental` skips a page when neither its `updatedAt` nor the host's
