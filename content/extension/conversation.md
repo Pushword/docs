@@ -96,6 +96,75 @@ Messages with a valid author email are notified one by one. For the others, sche
 `Pushword\Conversation\Service\NewMessageMailNotifier::send()`, which mails a summary at
 most once per interval.
 
+### Customize individual notifications
+
+Override any of these templates in
+`templates/bundles/PushwordConversationBundle/conversation/`:
+
+- `new_message.subject.txt.twig`: subject, normalized to one line after rendering.
+- `new_message.html.twig`: HTML body, with Twig HTML escaping.
+- `new_message.txt.twig`: plain text body.
+
+Their namespace is `@PushwordConversation/conversation/`. All three receive:
+
+| Variable | Value |
+| --- | --- |
+| `message` | Complete `Message` entity, including custom properties |
+| `appName` | Site name |
+| `content` | Message content decoded once with `htmlspecialchars_decode`; untrusted plain text |
+| `authorName` | Contact name, or `...` when null |
+| `authorEmail` | Contact email; also used as Reply-To |
+| `host` | Message host |
+| `referring` | Message form/page identifier |
+
+Keep `{% autoescape false %}` around subject and plain text overrides. In HTML,
+use `{{ content|nl2br }}` to preserve line breaks while escaping visitor content;
+never mark it `raw`. The default plain text keeps the translated sender and
+`form[...]` origin markers. Sites parsing notifications should preserve these markers
+in their overrides. Duplicate content from the same email is suppressed for ten minutes.
+
+The batch summary continues to use `notification.html.twig` with `appName` and `messages`.
+
+### Delay one message notification
+
+Before persisting a new message, opt it into delayed delivery with a positive integer
+number of seconds. For example, an Altimood quote form waits ten minutes:
+
+```php
+$message->setCustomProperty('notificationDelay', 600);
+$entityManager->persist($message);
+$entityManager->flush();
+```
+
+Messages without this property, or with `0`, still notify immediately. The first save
+sets a fixed `notificationSendAfter` timestamp in Doctrine; later saves of the same
+message do not move it. A site can copy its own configurable delay into
+`notificationDelay` before that first save; changing the site setting afterwards
+does not reschedule messages already queued. At delivery, templates receive the latest
+saved message, including any optional second-step details. After successful delivery,
+`notificationSentAt` prevents any further email for that message, even when its content changes later.
+This persistent state is separate from the immediate path's ten-minute content cache.
+
+Run `pw:conversation:notify-pending` every minute, from system cron or
+[the Pushword scheduler](/background-tasks#scheduled-commands):
+
+```yaml
+pushword:
+  scheduled_commands:
+    - { command: 'pw:conversation:notify-pending', on: 'cron: * * * * *' }
+```
+
+Keep the scheduler worker running (`messenger:consume scheduler_pushword`), or install
+the equivalent system cron. The command itself needs no Messenger transport. It reads
+the durable queue from Doctrine and sends at most 100 due messages per run. A failed
+send remains pending for the next run; a lock prevents overlapping workers from
+sending the same notification. The visitor can abandon the form: delivery depends on
+this worker, with no HTTP sleep or later browser request required.
+
+To integrate: update the packages, run `doctrine:schema:update --force`, configure the
+minute command, clear the caches in every environment used, restart the scheduler
+worker if applicable, and run the application tests before enabling delivery.
+
 ## Customize
 
 Override `@PushwordConversation/conversation/conversation.html.twig`, or per step
