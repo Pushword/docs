@@ -13,101 +13,115 @@ resolver, including host overrides, themes and fallback namespaces.
 The visitor is activated explicitly in the analysis loader. It is not registered in
 the application's Twig environment and does not add a TwigStan dependency to core.
 
-## Install and configure
+## Install in a Pushword project
 
-Install TwigStan as a development dependency in the downstream project:
+Install the development package alongside Pushword core 1.0.108 or later:
 
 ```shell
-composer require --dev twigstan/twigstan:^0.2.6
+composer require --dev pushword/twigstan:^1.0.109
 ```
 
-Create `twigstan-loader.php` in the project root. This example uses Symfony's test
-container to access private services; the `test` environment must enable
-`framework.test` and provide the environment variables needed to boot the application.
+Follow the [package setup](https://github.com/Pushword/twigstan#install): a small
+analysis kernel outside `src/`, a loader, and `twigstan.php` selecting PHP sources
+and templates. The package preserves the project's kernel configuration, enables
+its analysis service container and keeps its cache under `.twigstan/`. Add that
+directory to `.gitignore`.
 
-```php
-<?php
+The analyzer dependencies and temporary patches are locked inside the package.
+Their installation does not change the site's PHPStan or its extension installer.
+Only extensions explicitly included in the template-analysis PHPStan configuration
+are loaded. Shared application libraries retain autoload priority.
 
-use App\Kernel;
-use Pushword\Core\Site\SiteRegistry;
-use Pushword\Core\TwigStan\ResolveViewNodeVisitor;
-use Symfony\Component\Dotenv\Dotenv;
+Run from the project root:
 
-require __DIR__.'/vendor/autoload.php';
-
-(new Dotenv())->bootEnv(__DIR__.'/.env');
-
-$kernel = new Kernel('test', true);
-$kernel->boot();
-
-$container = $kernel->getContainer()->get('test.service_container');
-$twig = $container->get('twig');
-$site = $container->get(SiteRegistry::class)->getDefault();
-
-// Keep analysis-specific compiled templates out of the application's Twig cache.
-$twig->setCache(false);
-$twig->addNodeVisitor(new ResolveViewNodeVisitor($site));
-
-return $kernel;
+```shell
+vendor/bin/pushword-twigstan
+PUSHWORD_TWIGSTAN_HOST=example.org vendor/bin/pushword-twigstan
 ```
 
-Create `phpstan-twigstan.neon` with analysis settings for templates, separate from
-the project's PHP rules:
+Literal Twig `view()` and PHP `getView()` calls use the selected site's real
+resolver, including host overrides, themes and fallback namespaces. The loader
+switches the request context to that host; unknown hosts fail explicitly. Run each
+host separately rather than treating one site's results as coverage of all sites.
 
-```neon
-parameters:
-    level: 8
+Dynamic template names, including Pushword's generic page renderer, and Twig
+embedded in page content still require additional context discovery. Scanning a
+file does not establish coverage when no render context is known.
+
+## CI
+
+Start with explicit template files having known PHP render points. A separate
+`twigstan-ci.php` can select this narrower list. Run:
+
+```shell
+vendor/bin/pushword-twigstan --configuration=twigstan-ci.php --check-coverage
 ```
 
-Create `twigstan.php`:
+The command fails on analyzer errors and on any entry without a collected PHP
+render context. Its final report counts each covered template and lists missing
+ones. The coverage mode expects template files rather than directories.
 
-```php
-<?php
+## Pushword monorepo
 
-use TwigStan\Config\TwigStanConfig;
+The monorepo uses the same package through thin wrappers under `.scripts/twigstan/`:
 
-return TwigStanConfig::configure(__DIR__)
-    ->phpstanConfigurationFile(__DIR__.'/phpstan-twigstan.neon')
-    ->phpstanMemoryLimit('1G')
-    ->twigEnvironmentLoader(__DIR__.'/twigstan-loader.php')
-    ->tempDirectory(__DIR__.'/.twigstan/default')
-    ->phpPaths(__DIR__.'/src', __DIR__.'/vendor/pushword/core/src')
-    ->twigPaths(__DIR__.'/templates')
-    ->create();
+```shell
+composer twigstan
+composer twigstan -- packages/core/src/templates/user/forgot_password.html.twig
+composer twigstan-ci
+composer test-twigstan
 ```
 
-Add other installed bundles' PHP source directories when they render templates you
-want to analyze. Add `.twigstan/` to `.gitignore`, then run `vendor/bin/twigstan`.
-Returning the kernel lets TwigStan also inspect Symfony routes and security rules.
+`composer twigstan-ci` checks the 22 entries in `.scripts/twigstan/ci.php`, plus
+their dependencies, at level 8. These cover login and password forms, links, cards,
+videos, conversation notifications, static-server configuration and progress
+fragments. There is no baseline or ignored error in this scope.
 
-## What the visitor resolves
+## Temporary upstream patches
 
-For the selected site, this expression:
+The package's isolated tool pins TwigStan 0.2.6, PHPStan 2.3.5 and Twig 3.30.0.
+Composer Patches applies hashed local fixes for inherited parent block methods
+([#328](https://github.com/twigstan/twigstan/issues/328)) and guarded attribute
+access on null ([#329](https://github.com/twigstan/twigstan/issues/329)). Nine
+regression fixtures also verify that invalid arguments, missing variables and
+unguarded null access still produce errors.
 
-```twig
-{% extends view('/base.html.twig') %}
+For an upstream upgrade, remove fixed patch entries and their files under
+`packages/twigstan/tools/`, update the pinned constraints, then run:
+
+```shell
+composer --working-dir=packages/twigstan/tools patches-relock
+composer --working-dir=packages/twigstan/tools update
+composer --working-dir=packages/twigstan/tools patches-repatch
+composer test-twigstan
 ```
 
-becomes a literal template reference in the parsed tree, such as
-`@Pushword/base.html.twig` or a host-specific override. TwigStan can then follow the
-parent and propagate the controller's variables into child blocks. The same
-resolution applies to literal `view()` calls in includes and other expressions.
+Commit the dependency and patch locks with the patch removal. PAO is disabled in
+analysis subprocesses because its PHPStan formatter replaces TwigStan's result
+files.
 
-Both positional and named arguments are supported, including an explicit fallback
-namespace and `fallback: null`. Calls with dynamic arguments, such as
-`view(page.template)`, remain unresolved. Invalid arguments remain intact so the
-analyzer can report them.
+## Initial diagnostic triage
 
-## Multiple sites and coverage limits
+The initial full run reported 159 diagnostics. Each was assigned to one of these
+investigation groups; the counts are diagnostics, not confirmed bugs:
 
-Run analysis separately for each configured site: replace `getDefault()` in the
-loader with `findByHost('your-host')` and fail if the host is unknown. Give each run
-a separate TwigStan temporary directory. A template path can resolve to different
-parents for different hosts, so one site's results do not cover the others.
+| Group | Diagnostics | Follow-up |
+| --- | ---: | --- |
+| EasyAdmin vendor templates | 60 | Embedded-template compilation and admin context typing |
+| Controller, branch and form-theme context propagation | 44 | Preserve controller context separately from form widget context |
+| Generated guards and specialized contexts | 23 | Distinguish redundant generated checks from template errors |
+| Nullable request, admin, field or review context | 17 | Check request and branch narrowing before changing templates |
+| Generated write-only escaper properties | 6 | TwigStan compiler output |
+| Guarded optional values | 5 | Check `is defined` and coalescing propagation |
+| Library type contracts | 4 | Compare declared types with runtime behavior |
 
-This visitor resolves template references. It does not discover PHP render calls
-whose template names are selected dynamically, such as Pushword's main page render
-path, or infer values from page content. TwigStan's default mode only reports
-findings for templates with a known render context; scanning a file does not by
-itself establish coverage. Review those render points before making the analysis
-a required CI check.
+For example, the Git history timestamp renders correctly as an integer despite
+IntlExtension's narrower PHPDoc, and newsletter design variables are supplied by
+the controller despite form-theme diagnostics. Existing runtime tests cover these
+cases. The PHP view adapter expands the full analysis and can expose additional
+diagnostics; the full command remains outside the required CI check.
+
+Inspecting the gallery also uncovered two runtime bugs: an image's link override
+leaked to following images, and unlinked images were escaped as HTML text. Both
+have rendering regression tests. The gallery remains outside TwigStan CI while
+its generated optional-attribute guards still produce false positives.
