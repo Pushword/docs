@@ -14,6 +14,13 @@ Three login methods: password, magic link (passwordless) and OAuth (60+ provider
 
 The response is identical for unknown addresses, so the form does not reveal which accounts exist. If OAuth is configured, provider buttons also appear on the login page.
 
+Rate limits, per 15 minutes; a client is an IPv4 address or an IPv6 /64:
+
+| Step | Limit | `framework.rate_limiter` |
+| --- | --- | --- |
+| Email step, magic links and codes | 20 per client, 5 per email address | `login_email`, `login_address` |
+| Password attempts | 5 per account and client, 25 per client | `login_throttling_account`, `login_throttling_network` |
+
 ## User Management with Flat Files {id=users-yaml}
 
 Users can be defined in `config/users.yaml` and synced to the database by the [flat extension](/extension/flat#user-sync), to version-control who has access.
@@ -56,7 +63,7 @@ Their tokens are:
 - **Superseded** when a new magic link is requested
 
 A used, expired or superseded link never works again, except that a login link still
-offers code recovery (below).
+offers code recovery (below) for 24 hours after it was sent.
 
 Opening a login link on any device loads a page without consuming it. Its script
 submits a CSRF-protected POST once the page is active and visible; HEAD and GET
@@ -66,8 +73,10 @@ If the link is used, expired or superseded, **Receive a sign-in code** starts a 
 email authentication attempt. No code is sent by merely opening the page. The
 second email contains an eight-digit code, valid for ten minutes with five attempts
 across browsers. Requests share the login form's IP/address limits, with at least
-one minute between codes for a link. Only a hash is stored; the code never appears
-in a URL. Successful recovery revokes sessions issued by that link, while preserving
+one minute between codes for a link. Recovery ends 24 hours after the link was sent:
+the page then returns to the login form with the expired-link message, even for a
+code already sent, so the visitor requests a new link. Only a hash is stored; the
+code never appears in a URL. Successful recovery revokes sessions issued by that link, while preserving
 password/OAuth sessions and sessions issued by other links. A full browser scanner
 can still complete the automatic login before recovery; the code cannot undo access
 that has already occurred. Opening a link while already signed in as its account goes
