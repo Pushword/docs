@@ -69,7 +69,8 @@ the page cache, like the `liveBlock` fragments.
 - **`json`** — the client-side `search.json` fallback (zero PHP), consumed by
   `PushwordSimpleSearch` (shipped in `@pushword/js-helper`). Its fields mirror
   `searchable_attributes`, so the browser ranks `title`/`h1` above the body just
-  like Loupe — minus typo tolerance and stemming;
+  like Loupe, and ignores case, accents, the apostrophe style and French elisions the
+  same way — minus typo tolerance, stemming and stop words;
 - **`both`** (default) — both.
 
 The exported `loupe.db` is checkpointed before it is copied, so it carries its documents
@@ -83,6 +84,35 @@ OOM, interrupted deploy) can leave `loupe.db` damaged (`26 file is not a databas
 log warning — at open time when the file head is torn, during a reindex otherwise. An
 index reset at open time comes back **empty**: run `pw:search:index`.
 
+## French text and natural questions
+
+French elisions are split off the word they precede: `acompte`, `l'acompte` and
+`l’acompte` all find both "l’acompte" and "un acompte", whatever the case or accents.
+Results keep the original spelling and highlight the matched word. Filterable
+attributes such as `tags` keep their exact values. In PHP, query through
+`Pushword\Search\Service\Searcher`, which handles this normalization.
+
+By default, a page matching any query word is a hit, ranked by how many it matches: a
+question such as "comment fonctionne l’acompte ?" also lists pages containing only
+"comment". Two settings narrow it, globally or per app:
+
+- `search_stop_words` — words left out of a query while other words remain. Compared
+  without case or accents (`À` covers `a`). Keep to function words: "été" is also a
+  noun.
+- `search_matching_strategy` — `any` (default) or `all`. `all` requires every word:
+  right for short keyword searches, too strict for most questions.
+
+```yaml
+# config/packages/pushword.yaml
+pushword:
+  apps:
+    - hosts: [example.fr]
+      search_stop_words: [le, la, les, de, des, du, un, une, et, à, au, aux, en, pour, comment]
+```
+
+Run `pw:search:index` after changing `search_stop_words`; otherwise Loupe rebuilds the
+index during the next page save.
+
 ## Configuration
 
 ```yaml
@@ -90,6 +120,8 @@ index reset at open time comes back **empty**: run `pw:search:index`.
 search:
   index_dir: '%kernel.project_dir%/var/search' # one Loupe index per host
   results_per_page: 20
+  search_stop_words: []          # query words to ignore, overridable per app
+  search_matching_strategy: any  # any | all, overridable per app
   incremental: true       # reindex a page on save/delete (Messenger)
   index_on_static: true   # build the index during pw:static
   static_mode: both       # endpoint | json | both
