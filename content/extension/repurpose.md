@@ -69,7 +69,7 @@ schema and validates it — free, with whatever model you already use.
 1. `GET /api/repurpose/schema` — the JSON shape (keys, enums, ranges).
 2. `GET /api/repurpose/networks` — formats (ratio/pixels), per-network **hard
    limits** (errors) vs **guidance** (advice), and font pairings — each with an
-   `installed` flag; only pick installed ones (the rest fall back to Roboto).
+   `installed` flag. Validation through the API downloads a missing pairing.
    Pinterest models an organic image Pin: it requires exactly one 2:3 slide and
    a non-empty caption. Multiple frames belong in a video Pin or paid carousel ad.
 3. `POST /api/repurpose/validate` — validate a spec, get precise
@@ -112,10 +112,12 @@ handles URLs and emoji differently; Repurpose does not validate that count.
 ```bash
 bin/console pw:repurpose:schema                 # print the JSON Schema
 bin/console pw:repurpose:validate spec.json     # lint a spec (precise violations, non-zero exit)
+bin/console pw:repurpose:validate spec.json --strict # contrast warnings fail too
 bin/console pw:repurpose:render spec.json out/  # render to out/slide-1.svg …
 bin/console pw:repurpose:motion spec.json video/ # export an editable HyperFrames project
 bin/console pw:repurpose:fonts                  # list font pairings + installed status
 bin/console pw:repurpose:fonts bebas-neue-lato  # install a pairing's TTFs (or --all)
+bin/console pw:repurpose:fonts --heading=Gabarito --body=Poppins # any Google Fonts families
 ```
 
 All emit compact JSON when run by an AI agent (`--format=agent`).
@@ -124,7 +126,9 @@ All emit compact JSON when run by an AI agent (`--format=agent`).
 
 A slide's `image` carries `focusX`/`focusY` (0..1 focal point) and `zoom` (≥ 1),
 applied at **render time** as an SVG clip, so the same numbers hold when the slide is
-re-rendered at another ratio.
+re-rendered at another ratio. `media` must name a JPEG, PNG, GIF or WebP of the media
+library: anything else is a validation error, since the renderer could only paint it
+as a grey placeholder.
 
 ## Text
 
@@ -146,19 +150,34 @@ follows the slide's layout, align or text-scale controls.
 
 ## Fonts
 
-Six pairings ship with the package (DM Serif Display+DM Sans, Playfair+Chivo,
-Montserrat+Work Sans, Poppins+Inter, Anton+Roboto, Lora+Ubuntu); the other ~45 —
-all Google Fonts — are installed on demand with `pw:repurpose:fonts <pairing>`
-into `repurpose.font_dir` (default `var/repurpose/fonts`, outside `vendor/`). A pairing
-not installed falls back to Roboto — check the `installed` flag in
-`GET /api/repurpose/networks` or `pw:repurpose:fonts`. Fonts must be local: text is
-measured with `imagettfbbox`, and a rasterised SVG cannot fetch remote resources.
+`fontPairing` names a registry pairing, or pairs any two Google Fonts families:
+
+```json
+"fontPairing": { "heading": "Gabarito", "body": "Poppins" }
+```
+
+Headings render at weight 700, body text at 400. Six registry pairings ship with
+the package (DM Serif Display+DM Sans, Playfair+Chivo, Montserrat+Work Sans,
+Poppins+Inter, Anton+Roboto, Lora+Ubuntu); every other family is downloaded from
+Google Fonts into `repurpose.font_dir` (default `var/repurpose/fonts`, outside
+`vendor/`), which then caches it: a font on disk is never fetched again.
+
+The studio downloads missing families when it opens a post, previews or saves it, and
+so does the API on `validate` and `PUT`; rendering never makes a network call. On the
+command line, a font not installed is a validation error naming the command that
+installs it: `pw:repurpose:fonts <pairing>` or `pw:repurpose:fonts --heading=… --body=…`.
+`var/` is not versioned, so each machine downloads its fonts once. Fonts must be
+local: text is measured with `imagettfbbox`, and a rasterised SVG cannot fetch remote
+resources.
 
 ## Legibility
 
 A slide with an image and no `overlay` gets `0.35` (an explicit `0` is honoured), and
 `validate`, `PUT` and the studio preview return non-blocking contrast `warnings` (WCAG
-AA large text, 3:1) naming the slide and the fix.
+AA large text, 3:1) naming the text field and the fix. Every drawn block is measured:
+the tagline in the accent colour, the title and paragraph, and each free text in its
+own colour; a highlighted block is measured against its marker. The studio lists them
+under the toolbar; `pw:repurpose:validate --strict` turns them into failures.
 
 ## Creator byline
 
@@ -264,7 +283,10 @@ and disables HyperFrames telemetry in its npm commands. It needs no cloud accoun
 crossfades **in frames**; `timeline.schema.json` describes its shape. Crossfades
 overlap scenes and reduce total duration. Each slide exports SVG layers in
 drawing order, preserving the static layout and embedded assets. Layers support
-`none`, `fade`, `rise` and `zoom-in` animations.
+`none`, `fade`, `rise` and `zoom-in` animations. Text layers are exported with
+`"transition": "sequential"`: they enter after the incoming crossfade and leave
+during the first half of the outgoing one, so two slides' texts never overlap
+while their images crossfade.
 
 For custom animation, edit `src/scene.mjs` or register an object by slide id in
 `src/scenes.mjs`: `html(slide, video)` returns the markup, and
