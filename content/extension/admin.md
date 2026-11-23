@@ -75,10 +75,13 @@ and the page cannot be its own parent.
 
 ### Saving and recovering changes
 
-In classic mode, `Ctrl+S` saves without leaving the form. While you edit, the
-browser keeps a local copy for your account. **Restore them** puts your edited
-fields back in the form and warns if a newer revision changed any of them.
-A successful save, **Discard** or sign-out clears the copy.
+**Save** opens the page view after saving. Use `Ctrl+S` or `Cmd+S` to save and
+stay in the editor. Installed page tools such as Auto links and Repurpose are
+under **More actions**.
+
+While you edit, the browser keeps a local copy for your account. **Restore them**
+puts your edited fields back in the form and warns if a newer revision changed
+any of them. A successful save, **Discard** or sign-out clears the copy.
 
 The editor checks for newer revisions every three seconds and when you return
 to the tab. An untouched, visible editor reloads. If you have started editing,
@@ -86,18 +89,22 @@ the banner opens the latest version in another tab and lets you review and
 recover your work. The server rejects saves from an older revision.
 
 If you override `@pwAdmin/page/edit.html.twig`, retain the unsaved-changes and
-revision banners, `data-pw-unsaved-key` and the shortcut submit button. Render
-all remaining fields with `form_rest` or `form_end` to submit the revision.
+revision banners, `data-pw-unsaved-key` and the hidden `data-pw-ctrl-s-submit`
+button. Render the remaining fields with `form_rest` or `form_end` so the form
+submits the revision.
 
 ## Collaborative page editing
 
-On a saved Markdown page, choose **Collaborative mode**. Editor.js and Monaco
-merge and save body changes as you type. Other editors see an invitation to
-join and can bring local edits from a revision the session still holds.
+On a saved Markdown page, choose **Collaborative mode** in the page action bar.
+Editor.js and Monaco merge and save body changes as you type. Other editors
+see an invitation to join and can bring local edits from a revision the session
+still holds. Once you join, the action bar shows the initials of active
+collaborators. The code icon marks sessions using the collaborative API,
+including sessions authenticated with your account.
 
-Live saves follow the page's publication status. Use **Save settings** for
-other fields. Changing the publication date pauses live saves until you save
-the date and body together. With the [Version extension](/extension/version),
+Live saves follow the page's publication status. Changing the publication date
+pauses live saves until you save the date and body together.
+With the [Version extension](/extension/version),
 the next edit adds a restore point after five idle minutes or thirty minutes
 of continuous editing.
 
