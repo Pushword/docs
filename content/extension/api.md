@@ -194,6 +194,34 @@ property is removed — deleting a line in the file is an edit.
 - `400` — empty body, malformed YAML, or a document that does not open with `---`.
 - `422` and `428` are JSON errors, identical to the JSON endpoints.
 
+### Collaborative editing
+
+Use a bearer token with `POST /api/pages/{id}/draft` or, with Repurpose
+installed, `POST /api/repurpose/{id}/draft`. The API shares the admin's Yjs session.
+
+1. Send `{"after":0}` to join. The response gives you a `room`, an `after`
+   cursor and a full base64 Yjs `snapshot` or a saved `baseline` (Markdown or
+   JSON text). Seed a baseline using the same deterministic IDs as the example.
+2. Poll with `room` and `after`. To save, add the full base64 `snapshot` and its
+   materialized `content` as a string. `accepted: true` confirms the save. If a
+   write races with another editor, merge the returned `snapshot` and retry
+   with the new `after` cursor.
+3. If you join with an earlier session `revision` in `If-Match`, the response
+   may include an `anchor`. Apply local edits to the anchor, then merge the
+   current snapshot. A `409` means the room or revision is no longer usable.
+   Fetch the latest version and reconcile your edits before starting again.
+
+A request over 4 MiB returns `413`. Inconsistent Yjs state and invalid carousel
+specifications return `422`.
+
+The repository example `packages/admin/examples/shared-draft-agent.mjs`
+reads its token from `PUSHWORD_TOKEN`.
+
+```sh
+node packages/admin/examples/shared-draft-agent.mjs https://example.test/api/pages/42/draft "old sentence" "new sentence"
+node packages/admin/examples/shared-draft-agent.mjs https://example.test/api/repurpose/7/draft "Old title" "New title" /slides/0/title
+```
+
 ### The editor sync client — `GET /api/editor/sync.js`
 
 The Node client that editor repos run as a Claude Code PostToolUse hook is served by the
